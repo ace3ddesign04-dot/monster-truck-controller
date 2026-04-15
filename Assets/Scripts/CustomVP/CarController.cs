@@ -8,6 +8,7 @@ namespace CustomVP
     {
         public bool vehicleIsActive;
 
+        #region Donut Stunt
         [Header("Donut Assist")]
         public bool donutStuntActive = true;
         public float DonutMinSpeed = 4f;
@@ -92,9 +93,11 @@ namespace CustomVP
             m_Rigidbody.AddRelativeTorque(0f, assist, 0f, ForceMode.Acceleration);
         }
 
-        public bool sideWheeliStuntActive = true;
+        #endregion
 
+        #region Side Wheeling Stunt
         [Header("Side Wheelie COM Shift")]
+        public bool sideWheeliStuntActive = true;
         public bool EnableSideWheelieCOMShift = true;
         public Transform leftWheeliCOM;
         public Transform rightWheeliCOM;
@@ -327,6 +330,7 @@ namespace CustomVP
 
             sideWheeliAssistEnabled = true;
         }
+        #endregion
 
         [HideInInspector] public Rigidbody m_Rigidbody;
         [Header("Mass / Center Of Mass")]
