@@ -1404,6 +1404,23 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   vehicleIsActive: 1
+  sideSelfRightStuntActive: 1
+  SideSelfRightMaxSpeed: 10
+  SideSelfRightMinThrottle: 0.4
+  SideSelfRightMinTilt: 0.75
+  SideSelfRightWheelTorque: 450
+  SideSelfRightBrakeMultiplier: 0.08
+  SideSelfRightRollAssist: 4
+  SideSelfRightRollDamping: 1.8
+  SideSelfRightMaxAssist: 6
+  sideSelfRightActive: 0
+  SideSelfRightPitchPhaseDuration: 3
+  SideSelfRightPitchDirection: -1
+  SideSelfRightTorqueBiasDirection: 1
+  SideSelfRightPitchForce: 18
+  SideSelfRightPitchDamping: 1
+  SideSelfRightPitchMaxAssist: 16
+  SideSelfRightFrontRearTorqueBias: 0.85
   donutStuntActive: 1
   DonutMinSpeed: 4
   DonutMaxSpeed: 22
