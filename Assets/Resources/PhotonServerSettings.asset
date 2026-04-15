@@ -1,0 +1,74 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 33c5f9f162767f867ed7cca2c2d96d70, type: 3}
+  m_Name: "PhotonServerSettings"
+  m_EditorClassIdentifier: 
+  AppID: "6bb42797-2160-4495-b371-c4d245fe0e70"
+  VoiceAppID: 
+  ChatAppID: 
+  HostType: 1
+  PreferredRegion: 1
+  EnabledRegions: -1
+  Protocol: 0
+  ServerAddress: 
+  ServerPort: 5055
+  VoiceServerPort: 5055
+  JoinLobby: 1
+  EnableLobbyStatistics: 0
+  PunLogging: 0
+  NetworkLogging: 1
+  RunInBackground: 1
+  RpcList:
+  - "Chat"
+  - "DestroyRpc"
+  - "InstantiateRpc"
+  - "PickupItemInit"
+  - "PunPickup"
+  - "PunPickupSimple"
+  - "PunRespawn"
+  - "RequestForPickupItems"
+  - "RequestForPickupTimes"
+  - "VehicleStatus"
+  - "UpdateVehicleStatus"
+  - "ReportGameOver"
+  - "UpdateVehicleData"
+  - "SetVehicleTeam"
+  - "SetFlagCaptured"
+  - "CableDestroyed"
+  - "DynamicCableCreated"
+  - "GetWinchRequest"
+  - "OtherCarAttachedToUs"
+  - "OtherCarDetachedFromUs"
+  - "OtherPlayerKnockedOut"
+  - "ReceiveChatMessage"
+  - "StaticCableCreated"
+  - "UpdateLights"
+  - "WinchRequestAccepted"
+  - "WinchRequestDeclined"
+  - "OpponentFinishedTrailRace"
+  - "OtherPlayerReadyToRace"
+  - "OtherPlayerTotallyLoaded"
+  - "RestartAccepted"
+  - "RestartOffered"
+  - "SetFlagCapturedBlue"
+  - "SetFlagCapturedRed"
+  - "ReceiveCTFGameOn"
+  - "DisableMyColliders"
+  - "CTFGameOn"
+  - "AcceptTraileringRequestRPC"
+  - "ChangeTrailerMpConnectedStateRPC"
+  - "DeclineTraileringRequestRPC"
+  - "SendTraileringRequestRPC"
+  - "SpawnTraileredCarRPC"
+  - "SpawnTrailerRpc"
+  - "TellEveryoneImOnTrailerRPC"
+  - "TellEveryoneImOuttaTrailerRPC"
+  DisableAutoOpenWizard: 1
