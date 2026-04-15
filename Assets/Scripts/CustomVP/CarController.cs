@@ -25,7 +25,7 @@ namespace CustomVP
         public bool sideSelfRightActive;
 
         public float SideSelfRightPitchPhaseDuration = 0.45f;
-        private float SideSelfRightPitchDirection = -1f;   // -1 = nose down first, 1 = nose up first
+        private float SideSelfRightPitchDirection = -1f;
 
         public float SideSelfRightPitchForce = 14f;
         public float SideSelfRightPitchDamping = 1.2f;

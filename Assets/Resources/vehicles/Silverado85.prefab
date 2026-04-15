@@ -1414,12 +1414,10 @@ MonoBehaviour:
   SideSelfRightRollDamping: 1.8
   SideSelfRightMaxAssist: 6
   sideSelfRightActive: 0
-  SideSelfRightPitchPhaseDuration: 3
-  SideSelfRightPitchDirection: -1
-  SideSelfRightTorqueBiasDirection: 1
-  SideSelfRightPitchForce: 18
+  SideSelfRightPitchPhaseDuration: 2.5
+  SideSelfRightPitchForce: 100
   SideSelfRightPitchDamping: 1
-  SideSelfRightPitchMaxAssist: 16
+  SideSelfRightPitchMaxAssist: 100
   SideSelfRightFrontRearTorqueBias: 0.85
   donutStuntActive: 1
   DonutMinSpeed: 4
