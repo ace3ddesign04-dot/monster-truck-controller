@@ -159,7 +159,7 @@ namespace CustomVP
                 return false;
             }
 
-            if (Mathf.Abs(xInput) > 0.9f && !sideWheeliAssistEnabled) {
+            if (Mathf.Abs(xInput) > 0.9f && Mathf.Abs(yInput) > 0.9f && !sideWheeliAssistEnabled) {
                 donutIntentTimer += Time.deltaTime;
                 if (donutIntentTimer > donutIntentTime) {
                     return true;
