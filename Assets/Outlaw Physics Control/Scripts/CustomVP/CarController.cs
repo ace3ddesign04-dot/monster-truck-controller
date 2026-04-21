@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityStandardAssets.CrossPlatformInput;
 
@@ -8,123 +8,201 @@ namespace CustomVP
     {
         public bool vehicleIsActive;
 
-        #region Self Righting System
+        #region Side Self Right
         [Header("Side Self Right")]
         public bool sideSelfRightStuntActive = true;
-
         public float SideSelfRightMaxSpeed = 10f;
         public float SideSelfRightMinThrottle = 0.4f;
         public float SideSelfRightMinTilt = 0.75f;
 
-        public float SideSelfRightWheelTorque = 250f;
-        public float SideSelfRightBrakeMultiplier = 0.15f;
+        public float SideSelfRightPitchPhaseDuration = 1.0f;
+        public float SideSelfRightPitchDirection = -1f;
+
+        public float SideSelfRightPitchForce = 18f;
+        public float SideSelfRightPitchDamping = 2f;
+        public float SideSelfRightPitchMaxAssist = 16f;
+        public float SideSelfRightPitchRollLockStrength = 24f;
 
         public float SideSelfRightRollAssist = 6f;
         public float SideSelfRightRollDamping = 2.5f;
-        public float SideSelfRightMaxAssist = 8f;
+        public float SideSelfRightMaxAssist = 10f;
+
+        public float SideSelfRightRecoverWheelTorque = 220f;
+        public float SideSelfRightRecoverBrakeMultiplier = 0.15f;
+
+        [Range(0f, 1f)] public float SideSelfRightPitchPhaseWheelGrip = 0.05f;
+        [Range(0f, 1f)] public float SideSelfRightAntirollMultiplier = 0.10f;
 
         public bool sideSelfRightActive;
 
-        public float SideSelfRightPitchPhaseDuration = 0.45f;
-        private float SideSelfRightPitchDirection = -1f;
-
-        public float SideSelfRightPitchForce = 14f;
-        public float SideSelfRightPitchDamping = 1.2f;
-        public float SideSelfRightPitchMaxAssist = 12f;
-
-        public float SideSelfRightFrontRearTorqueBias = 0.65f;
-
         private float sideSelfRightTimer = 0f;
+        private bool sideSelfRightLatched = false;
+        private bool sideSelfRightLowGripApplied = false;
+        private float sideSelfRightLockedRoll = 0f;
 
-        private bool IsTryingToSideSelfRight() {
+        private float GetCurrentLatTilt() {
+            Vector3 flatRight = Vector3.ProjectOnPlane(transform.right, Vector3.up);
+            float latTilt = (transform.right - flatRight).y;
 
-            if (!sideSelfRightStuntActive || (!TouchingGround && !Grounded()) || Mathf.Abs(Speed) > SideSelfRightMaxSpeed || Throttle < SideSelfRightMinThrottle || Mathf.Abs(LatTilt) < SideSelfRightMinTilt) {
-                EnableRearSteer = true;
-                
+            if (transform.up.y < 0f)
+                latTilt = -latTilt;
+
+            return latTilt;
+        }
+
+        private bool CanStartSideSelfRight() {
+            float currentLatTilt = GetCurrentLatTilt();
+
+            if (!sideSelfRightStuntActive)
                 return false;
-            }
 
-            EnableRearSteer = false;
+            if (!TouchingGround && !Grounded())
+                return false;
+
+            if (Mathf.Abs(Speed) > SideSelfRightMaxSpeed)
+                return false;
+
+            if (Throttle < SideSelfRightMinThrottle)
+                return false;
+
+            if (Mathf.Abs(currentLatTilt) < SideSelfRightMinTilt)
+                return false;
+
             return true;
+        }
+
+        private void SetSelfRightWheelGrip(float grip) {
+            for (int i = 0; i < wheels.Count; i++) {
+                if (wheels[i].wc == null)
+                    continue;
+
+                wheels[i].wc.forwardFrictionCoefficient = grip;
+                wheels[i].wc.sideFrictionCoefficient = grip;
+                wheels[i].wc.UpdateFriction();
+            }
+        }
+
+        private void RestoreSelfRightWheelGrip() {
+            if (!sideSelfRightLowGripApplied)
+                return;
+
+            SetSelfRightWheelGrip(1f);
+            sideSelfRightLowGripApplied = false;
         }
         private void DoSideSelfRight() {
             sideSelfRightActive = false;
 
-            if (!IsTryingToSideSelfRight()) {
+            if (!sideSelfRightLatched) {
+                if (!CanStartSideSelfRight()) {
+                    sideSelfRightTimer = 0f;
+                    RestoreSelfRightWheelGrip();
+                    return;
+                }
+
+                sideSelfRightLatched = true;
                 sideSelfRightTimer = 0f;
+                sideSelfRightLockedRoll = Vector3.Dot(transform.right, Vector3.up);
+            }
+
+            if ((!TouchingGround && !Grounded()) ||
+                Mathf.Abs(Speed) > SideSelfRightMaxSpeed ||
+                Throttle < SideSelfRightMinThrottle) {
+                sideSelfRightLatched = false;
+                sideSelfRightTimer = 0f;
+                RestoreSelfRightWheelGrip();
                 return;
             }
 
             sideSelfRightActive = true;
             sideSelfRightTimer += Time.fixedDeltaTime;
 
+            EnableRearSteer = false;
             EnableSideWheelieAssist = false;
             EnableSideWheelieCOMShift = false;
+
+            sideWheelieCOMState = 0;
+            sideWheelieReleaseTimer = 0f;
+            sideWheelieIntentTimer = 0f;
+            sideWheelieIntentDirection = 0;
             donutIntentTimer = 0f;
 
-            // Based on your measured values:
-            // left side down  => LatTilt < 0
-            // right side down => LatTilt > 0
-            bool leftSideDown = LatTilt < 0f;
-
+            float currentLatTilt = GetCurrentLatTilt();
+            bool leftSideDown = currentLatTilt < 0f;
             bool pitchPhase = sideSelfRightTimer < SideSelfRightPitchPhaseDuration;
-            int recoverySideGroundedWheels = 0;
-
-            for (int i = 0; i < wheels.Count; i++) {
-                if (wheels[i].wc == null || wheels[i].wc.wheelCollider == null)
-                    continue;
-
-                bool isLeftWheel = (i == 0 || i == 2);
-                bool isFrontWheel = (i == 0 || i == 1);
-                bool isRecoverySideWheel = leftSideDown ? isLeftWheel : !isLeftWheel;
-
-                if (!isRecoverySideWheel)
-                    continue;
-
-                if (wheels[i].wc.IsGrounded)
-                    recoverySideGroundedWheels++;
-
-                float torqueBias = 1f;
-
-                // Phase 1: force front/rear torque imbalance to create visible X-axis rotation.
-                if (pitchPhase) {
-                    float signedBias = Mathf.Sign(SideSelfRightPitchDirection);
-
-                    if (isFrontWheel)
-                        torqueBias += SideSelfRightFrontRearTorqueBias * signedBias;
-                    else
-                        torqueBias -= SideSelfRightFrontRearTorqueBias * signedBias;
-                }
-
-                wheels[i].wc.BrakeTorque *= SideSelfRightBrakeMultiplier;
-                wheels[i].wc.MotorTorque = SideSelfRightWheelTorque * torqueBias * Mathf.Sign(Throttle);
-            }
 
             Vector3 localAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
             float pitchRate = localAngularVelocity.x;
             float rollRate = localAngularVelocity.z;
 
-            float pitchAssist = 0f;
-            float rollAssist = 0f;
-
-            // Phase 1: ONLY pitch
             if (pitchPhase) {
-                pitchAssist = SideSelfRightPitchDirection * SideSelfRightPitchForce - pitchRate * SideSelfRightPitchDamping;
-                pitchAssist = Mathf.Clamp(pitchAssist, -SideSelfRightPitchMaxAssist, SideSelfRightPitchMaxAssist);
-            }
-            // Phase 2: ONLY roll upright
-            else {
+                if (!sideSelfRightLowGripApplied) {
+                    SetSelfRightWheelGrip(SideSelfRightPitchPhaseWheelGrip);
+                    sideSelfRightLowGripApplied = true;
+                }
+
+                for (int i = 0; i < wheels.Count; i++) {
+                    if (wheels[i].wc == null || wheels[i].wc.wheelCollider == null)
+                        continue;
+
+                    wheels[i].wc.MotorTorque = 0f;
+                    wheels[i].wc.BrakeTorque = 0f;
+                }
+
+                localAngularVelocity.z = 0f;
+                m_Rigidbody.angularVelocity = transform.TransformVector(localAngularVelocity);
+
                 float currentRoll = Vector3.Dot(transform.right, Vector3.up);
-                rollAssist = (-currentRoll) * SideSelfRightRollAssist - rollRate * SideSelfRightRollDamping;
 
-                if (recoverySideGroundedWheels == 0)
-                    rollAssist *= 1.25f;
+                float pitchAssist = SideSelfRightPitchDirection * SideSelfRightPitchForce
+                                    - pitchRate * SideSelfRightPitchDamping;
+                pitchAssist = Mathf.Clamp(
+                    pitchAssist,
+                    -SideSelfRightPitchMaxAssist,
+                    SideSelfRightPitchMaxAssist
+                );
 
-                rollAssist = Mathf.Clamp(rollAssist, -SideSelfRightMaxAssist, SideSelfRightMaxAssist);
+                float rollLockAssist = (sideSelfRightLockedRoll - currentRoll) * SideSelfRightPitchRollLockStrength;
+                m_Rigidbody.AddRelativeTorque(pitchAssist, 0f, rollLockAssist, ForceMode.Acceleration);
+                return;
             }
 
-            m_Rigidbody.AddRelativeTorque(pitchAssist, 0f, rollAssist, ForceMode.Acceleration);
+            RestoreSelfRightWheelGrip();
+
+            for (int i = 0; i < wheels.Count; i++) {
+                if (wheels[i].wc == null || wheels[i].wc.wheelCollider == null)
+                    continue;
+
+                wheels[i].wc.MotorTorque = 0f;
+                wheels[i].wc.BrakeTorque = 0f;
+
+                bool isLeftWheel = (i == 0 || i == 2);
+                bool isRecoverySideWheel = leftSideDown ? isLeftWheel : !isLeftWheel;
+
+                if (!isRecoverySideWheel)
+                    continue;
+
+                wheels[i].wc.BrakeTorque = currentBrakeTorque * SideSelfRightRecoverBrakeMultiplier;
+                wheels[i].wc.MotorTorque = SideSelfRightRecoverWheelTorque * Mathf.Sign(Throttle);
+            }
+
+            float currentRoll2 = Vector3.Dot(transform.right, Vector3.up);
+            float rollAssist = (-currentRoll2) * SideSelfRightRollAssist
+                               - rollRate * SideSelfRightRollDamping;
+            rollAssist = Mathf.Clamp(
+                rollAssist,
+                -SideSelfRightMaxAssist,
+                SideSelfRightMaxAssist
+            );
+
+            m_Rigidbody.AddRelativeTorque(0f, 0f, rollAssist, ForceMode.Acceleration);
+
+            if (Mathf.Abs(currentRoll2) < 0.18f && Grounded()) {
+                sideSelfRightLatched = false;
+                sideSelfRightTimer = 0f;
+                RestoreSelfRightWheelGrip();
+            }
         }
+
         #endregion
 
         #region Donut Stunt
@@ -147,7 +225,7 @@ namespace CustomVP
         public float donutIntentTime = 3.0f;
 
         private bool UpdateDonutIntent() {
-            if (!donutStuntActive || sideSelfRightActive || IsTryingToSideSelfRight()) {
+            if (!donutStuntActive || sideSelfRightActive) {
                 return false;
             }
 
@@ -164,7 +242,7 @@ namespace CustomVP
         }
 
         private void ApplyDonutFriction(bool active) {
-            if (!donutStuntActive || sideSelfRightActive || IsTryingToSideSelfRight())
+            if (!donutStuntActive || sideSelfRightActive)
                 return;
 
             for (int i = 0; i < wheels.Count; i++) {
@@ -185,7 +263,7 @@ namespace CustomVP
         }
 
         private void DoDonutAssist() {
-            if (!donutStuntActive || sideSelfRightActive || IsTryingToSideSelfRight())
+            if (!donutStuntActive || sideSelfRightActive)
                 return;
 
             bool donutActive = UpdateDonutIntent();
@@ -249,10 +327,13 @@ namespace CustomVP
         public float SideWheelieMaxAssist = 20f;
 
         public bool sideWheeliAssistEnabled;
-        
+
         private void UpdateSideWheelieIntent() {
-            if (!sideWheeliStuntActive)
+            if (!sideWheeliStuntActive || sideSelfRightActive) {
+                sideWheelieIntentTimer = 0f;
+                sideWheelieIntentDirection = 0;
                 return;
+            }
 
             sideWheelieIntentDirection = 0;
 
@@ -383,6 +464,9 @@ namespace CustomVP
         private Vector3 GetTargetCenterOfMass() {
             Vector3 baseCOM = (comBase != null) ? comBase.localPosition : manualCenterOfMass;
 
+            if (sideSelfRightActive)
+                return baseCOM;
+
             if (!EnableSideWheelieCOMShift || !useManualCenterOfMass)
                 return baseCOM;
 
@@ -409,18 +493,18 @@ namespace CustomVP
         }
 
         private void DoSideWheelieAssist() {
-            EnableRearSteer = true;
-            if (sideSelfRightActive || IsTryingToSideSelfRight()) {
+            if (sideSelfRightActive) {
                 sideWheeliAssistEnabled = false;
                 return;
             }
+
+            EnableRearSteer = true;
 
             if (!sideWheeliStuntActive || !EnableSideWheelieAssist || wheels.Count < 4) {
                 sideWheeliAssistEnabled = false;
                 return;
             }
 
-            // Do not assist unless side-wheelie state / COM shift is already active
             if (sideWheelieCOMState == 0) {
                 sideWheeliAssistEnabled = false;
                 return;
@@ -434,7 +518,6 @@ namespace CustomVP
                 return;
             }
 
-            // While already in wheelie state, use hold speed, not entry speed
             if (Mathf.Abs(Speed) < SideWheelieHoldMinSpeed) {
                 sideWheeliAssistEnabled = false;
                 return;
@@ -961,8 +1044,8 @@ namespace CustomVP
             }
 
             DoCarHandling();
+            DoSideSelfRight();
 
-            // Now intent + COM use current frame Speed/Throttle
             UpdateSideWheelieIntent();
             UpdateCenterOfMass();
 
@@ -973,7 +1056,6 @@ namespace CustomVP
             DoAirForces();
             DoAntiroll();
             DoDonutAssist();
-            DoSideSelfRight();
             DoSideWheelieAssist();
 
             acceleration = (m_Rigidbody.velocity - lastVelocity) / Time.fixedDeltaTime;
@@ -1311,6 +1393,16 @@ namespace CustomVP
 
             float effectiveFrontLateralAntiroll = FrontLateralAntiroll;
             float effectiveRearLateralAntiroll = RearLateralAntiroll;
+            float effectiveLongitudinalAntiroll = LongitudinalAntiroll;
+
+            if (sideSelfRightActive) {
+                if (sideSelfRightTimer < SideSelfRightPitchPhaseDuration)
+                    return;
+
+                effectiveFrontLateralAntiroll *= SideSelfRightAntirollMultiplier;
+                effectiveRearLateralAntiroll *= SideSelfRightAntirollMultiplier;
+                effectiveLongitudinalAntiroll *= SideSelfRightAntirollMultiplier;
+            }
 
             float frontLeftCompression = wheels[0].wc.IsGrounded ? wheels[0].wc.Compression : 0f;
             float frontRightCompression = wheels[1].wc.IsGrounded ? wheels[1].wc.Compression : 0f;
@@ -1334,7 +1426,7 @@ namespace CustomVP
 
             float frontAvgCompression = (frontLeftCompression + frontRightCompression) * 0.5f;
             float rearAvgCompression = (rearLeftCompression + rearRightCompression) * 0.5f;
-            float longitudinalAntirollForce = (frontAvgCompression - rearAvgCompression) * LongitudinalAntiroll;
+            float longitudinalAntirollForce = (frontAvgCompression - rearAvgCompression) * effectiveLongitudinalAntiroll;
 
             Vector3 frontAxleCenter = (wheels[0].wc.transform.position + wheels[1].wc.transform.position) * 0.5f;
             Vector3 rearAxleCenter = (wheels[2].wc.transform.position + wheels[3].wc.transform.position) * 0.5f;
