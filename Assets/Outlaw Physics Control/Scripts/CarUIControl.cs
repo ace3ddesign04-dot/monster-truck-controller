@@ -303,29 +303,31 @@ public class CarUIControl : MonoBehaviour
 
 	public Font font;
 
-	private CarController carController
-	{
-		get
-		{
-			if (VehicleLoader.Instance != null)
-			{
-				return VehicleLoader.Instance.playerCarController;
-			}
-			return null;
-		}
-	}
+	public CarController carController;
+	//private CarController carController
+	//{
+	//	get
+	//	{
+	//		if (VehicleLoader.Instance != null)
+	//		{
+	//			return VehicleLoader.Instance.playerCarController;
+	//		}
+	//		return null;
+	//	}
+	//}
 
-	private EngineController engine
-	{
-		get
-		{
-			if (VehicleLoader.Instance != null)
-			{
-				return VehicleLoader.Instance.playerEngine;
-			}
-			return null;
-		}
-	}
+	public EngineController engine;
+	//private EngineController engine
+	//{
+	//	get
+	//	{
+	//		if (VehicleLoader.Instance != null)
+	//		{
+	//			return VehicleLoader.Instance.playerEngine;
+	//		}
+	//		return null;
+	//	}
+	//}
 
 	private RacingManager racingManager => RacingManager.Instance;
 

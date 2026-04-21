@@ -5,22 +5,25 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
+  - enabled: 0
     path: Assets/Outlaw Physics Control/Scenes/Loading.unity
     guid: fe559a1a79b3e7944a71aa49eef3b31b
-  - enabled: 1
+  - enabled: 0
     path: Assets/Outlaw Physics Control/Scenes/Menu.unity
     guid: 0026dcb6dc7fb73449656932da06651a
-  - enabled: 1
+  - enabled: 0
     path: Assets/Outlaw Physics Control/StuntPark/StuntPark.unity
     guid: d1418d66c221f6e40ab0d0d62469c175
-  - enabled: 1
+  - enabled: 0
     path: Assets/Outlaw Physics Control/Scenes/Maps/Publish/MapDesertNG.unity
     guid: 0dead1b5032ec294eb27094460a045ae
-  - enabled: 1
+  - enabled: 0
     path: Assets/Outlaw Physics Control/Scenes/Maps/Publish/RockParkNG.unity
     guid: aa127e05d5f86af47a5734b0386c182b
-  - enabled: 1
+  - enabled: 0
     path: Assets/Outlaw Physics Control/Scenes/Maps/Publish/MapWoodlandsV2NG.unity
     guid: 548763c6b6e713a4fa815137ace2ddfc
+  - enabled: 1
+    path: Assets/New Scene.unity
+    guid: 2c20378a830b6854ab61631685982bc3
   m_configObjects: {}

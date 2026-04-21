@@ -16,7 +16,14 @@ public class CameraController : MonoBehaviour
 		Cinematic
 	}
 
-	public static CameraController Instance;
+    [Header("Donut Camera")]
+    public bool LockCameraDuringDonut = true;
+    public float DonutCameraYAngle = 12f;
+    public float DonutCameraDistance = 7f;
+    private bool donutCameraLocked;
+    private float donutLockedXAngle;
+
+    public static CameraController Instance;
 
 	[HideInInspector]
 	public Transform forcedTarget;
@@ -106,17 +113,18 @@ public class CameraController : MonoBehaviour
 
 	private Vector3 movingSpeed;
 
-	private CarController carController
-	{
-		get
-		{
-			if (VehicleLoader.Instance != null)
-			{
-				return VehicleLoader.Instance.playerCarController;
-			}
-			return null;
-		}
-	}
+	public CarController carController;
+	//private CarController carController
+	//{
+	//	get
+	//	{
+	//		if (VehicleLoader.Instance != null)
+	//		{
+	//			return VehicleLoader.Instance.playerCarController;
+	//		}
+	//		return null;
+	//	}
+	//}
 
 	private IKDriverController driver
 	{
@@ -170,7 +178,17 @@ public class CameraController : MonoBehaviour
 		TargetYAngle = YStart;
 	}
 
-	public void Shake()
+    private bool IsDonutCameraActive() {
+        if (carController == null)
+            return false;
+
+        return carController.donutStuntActive
+            && carController.donutIntentTimer > carController.donutIntentTime
+            && Mathf.Abs(carController.xInput) > 0.9f
+            && Mathf.Abs(carController.yInput) > 0.9f;
+    }
+
+    public void Shake()
 	{
 		ShakeAmount = 1f;
 	}
@@ -302,35 +320,58 @@ public class CameraController : MonoBehaviour
 		case CameraMode.Free:
 			DoFreeNavigation();
 			DistanceCamTarget = Mathf.Clamp(DistanceCamTarget - UnityEngine.Input.GetAxis("Mouse ScrollWheel") * 3f, MinDistance, MaxDistance);
-			DoSphereCam();
+			DoSphereCam(false);
 			break;
 		case CameraMode.Photo:
 			DoFreeNavigation();
 			DistanceCamTarget = Mathf.Clamp(DistanceCamTarget - UnityEngine.Input.GetAxis("Mouse ScrollWheel") * 3f, MinDistance, MaxDistance * 2f);
-			DoSphereCam();
+			DoSphereCam(false);
 			break;
-		case CameraMode.Follow:
-			if (!(carController == null))
-			{
-				if (carController.Speed >= 0f)
-				{
-					AngleX = 0f;
-				}
-				if (ForceRearView || (carController.Speed < -10f && carController.WheelsOffTheGround == 0))
-				{
-					AngleX = 180f;
-				}
-				desiredYAngle = carController.FollowYAngle;
-				DistanceCamTarget = carController.FollowDistance;
-				bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
-				if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag)
-				{
-					TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
-				}
-				DoSphereCam();
-			}
-			break;
-		case CameraMode.Side:
+            case CameraMode.Follow:
+                if (carController != null) {
+                    bool donutCam = LockCameraDuringDonut && IsDonutCameraActive();
+
+                    if (donutCam) {
+                        if (!donutCameraLocked) {
+                            donutCameraLocked = true;
+                            donutLockedXAngle = CurrentXAngle;
+                        }
+
+                        AngleX = 0f;
+                        desiredYAngle = DonutCameraYAngle;
+                        DistanceCamTarget = DonutCameraDistance;
+
+                        bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
+                        if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
+                            TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
+                        }
+
+                        DoSphereCam(true);
+                    }
+                    else {
+                        donutCameraLocked = false;
+
+                        if (carController.Speed >= 0f) {
+                            AngleX = 0f;
+                        }
+
+                        if (ForceRearView || (carController.Speed < -10f && carController.WheelsOffTheGround == 0)) {
+                            AngleX = 180f;
+                        }
+
+                        desiredYAngle = carController.FollowYAngle;
+                        DistanceCamTarget = carController.FollowDistance;
+
+                        bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
+                        if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
+                            TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
+                        }
+
+                        DoSphereCam(false);
+                    }
+                }
+                break;
+            case CameraMode.Side:
 			if (!(carController == null))
 			{
 				AngleX = SideXAngle;
@@ -340,9 +381,9 @@ public class CameraController : MonoBehaviour
 				{
 					TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
 				}
-				DistanceCamTarget = carController.FollowDistance;
-				DoSphereCam();
-			}
+                DistanceCamTarget = carController.SideDistance;
+                DoSphereCam(false);
+            }
 			break;
 		case CameraMode.FirstPerson:
 			if (!(carController == null))
@@ -436,7 +477,7 @@ public class CameraController : MonoBehaviour
 		}
 	}
 
-	private void DoSphereCam()
+	private void DoSphereCam(bool lockXAngle)
 	{
 		TargetYAngle = Mathf.Clamp(TargetYAngle, -45f, YMax);
 		AngleY = TargetYAngle;
@@ -446,13 +487,15 @@ public class CameraController : MonoBehaviour
 		{
 			flag = true;
 		}
-		Vector3 eulerAngles = target.transform.eulerAngles;
-		float y = eulerAngles.y;
-		if (flag)
-		{
-			CurrentXAngle = Mathf.LerpAngle(CurrentXAngle, y, RotationDamping * Time.deltaTime);
-		}
-		float num;
+        if (flag && !lockXAngle) {
+            Vector3 eulerAngles = target.transform.eulerAngles;
+            float y = eulerAngles.y;
+            CurrentXAngle = Mathf.LerpAngle(CurrentXAngle, y, RotationDamping * Time.deltaTime);
+        }
+        else if (lockXAngle) {
+            CurrentXAngle = donutLockedXAngle;
+        }
+        float num;
 		if (flag)
 		{
 			Vector3 eulerAngles2 = target.transform.eulerAngles;

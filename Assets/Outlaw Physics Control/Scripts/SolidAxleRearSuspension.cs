@@ -6,7 +6,10 @@ public class SolidAxleRearSuspension : Suspension
 {
 	private CarController carController;
 
-	public SolidAxleRearWheel RLWheel;
+    private Quaternion rlSteeringAxleBaseRotation;
+    private Quaternion rrSteeringAxleBaseRotation;
+
+    public SolidAxleRearWheel RLWheel;
 
 	public SolidAxleRearWheel RRWheel;
 
@@ -69,10 +72,29 @@ public class SolidAxleRearSuspension : Suspension
 
 	private void Awake()
 	{
-		carController = GetComponentInParent<CarController>();
-	}
+        carController = GetComponentInParent<CarController>();
 
-	public override void OnValidate()
+        if (RLWheel.SteeringAxle != null)
+            rlSteeringAxleBaseRotation = RLWheel.SteeringAxle.localRotation;
+
+        if (RRWheel.SteeringAxle != null)
+            rrSteeringAxleBaseRotation = RRWheel.SteeringAxle.localRotation;
+    }
+    private void ApplyRearVisualSteer(float steerAngle) {
+        float rearVisualSteer = 0f;
+
+        if (carController != null)
+            rearVisualSteer = (0f - steerAngle) * carController.InverseSteerMultiplier;
+        else
+            rearVisualSteer = (0f - steerAngle) * Controls.RearSteering.FloatValue;
+
+        if (RLWheel.SteeringAxle != null)
+            RLWheel.SteeringAxle.localRotation = rlSteeringAxleBaseRotation * Quaternion.Euler(0f, 0f, rearVisualSteer);
+
+        if (RRWheel.SteeringAxle != null)
+            RRWheel.SteeringAxle.localRotation = rrSteeringAxleBaseRotation * Quaternion.Euler(0f, 0f, rearVisualSteer);
+    }
+    public override void OnValidate()
 	{
 		if (base.isActiveAndEnabled)
 		{
@@ -86,10 +108,10 @@ public class SolidAxleRearSuspension : Suspension
 			DoLeafSpringMountHeight();
 			DoShocks();
 			ChangeShocks();
-			if (carController != null)
-			{
-				carController.InverseSteerMultiplier = Controls.RearSteering.FloatValue;
-			}
+			//if (carController != null)
+			//{
+				//carController.InverseSteerMultiplier = Controls.RearSteering.FloatValue;
+			//}
 			if (!(wheelColliders[0] == null) && !(wheelColliders[1] == null))
 			{
 				wheelColliders[0].OnValidate();
@@ -200,8 +222,8 @@ public class SolidAxleRearSuspension : Suspension
 			position = hitInfo.point + new Vector3(0f, WheelRadius, 0f);
 		}
 		RLWheel.Dummy.position = position;
-		RLWheel.SteeringAxle.localEulerAngles = new Vector3(0f, 0f, (0f - SteerAngle) * Controls.RearSteering.FloatValue);
-		position = Raycasters[1].position - Raycasters[1].up * (Controls.Travel.FloatValue + 0.2f);
+        ApplyRearVisualSteer(SteerAngle);
+        position = Raycasters[1].position - Raycasters[1].up * (Controls.Travel.FloatValue + 0.2f);
 		if (Physics.Raycast(Raycasters[1].position, -Raycasters[1].up, out hitInfo) && hitInfo.distance < Controls.Travel.FloatValue + WheelRadius + 0.2f)
 		{
 			position = hitInfo.point + new Vector3(0f, WheelRadius, 0f);
@@ -212,8 +234,8 @@ public class SolidAxleRearSuspension : Suspension
 		Vector3 vector2 = RRWheel.Dummy.parent.InverseTransformPoint(position);
 		localPosition.x = vector2.x;
 		RRWheel.Dummy.localPosition = localPosition;
-		RRWheel.SteeringAxle.localEulerAngles = new Vector3(0f, 0f, (0f - SteerAngle) * Controls.RearSteering.FloatValue);
-		DriveshaftStart.Rotate(0f, rpm, 0f);
+        ApplyRearVisualSteer(SteerAngle);
+        DriveshaftStart.Rotate(0f, rpm, 0f);
 		Vector3 localPosition2 = RearAxleDummy.localPosition;
 		Vector3 localPosition3 = RLWheel.Dummy.localPosition;
 		localPosition2.z = localPosition3.z;
@@ -264,8 +286,8 @@ public class SolidAxleRearSuspension : Suspension
 		float num4 = num2 * Mathf.Tan(num3 * ((float)Math.PI / 180f));
 		localPosition.z += num4;
 		RLWheel.Dummy.localPosition = localPosition;
-		RLWheel.SteeringAxle.localEulerAngles = new Vector3(0f, 0f, (0f - num) * Controls.RearSteering.FloatValue);
-		perFrameRotation = base.wheelColliders[1].wheelCollider.perFrameRotation;
+        ApplyRearVisualSteer(num);
+        perFrameRotation = base.wheelColliders[1].wheelCollider.perFrameRotation;
 		RRWheel.BrakeDisk.Rotate(RRWheel.BrakeDisk.right, perFrameRotation, Space.World);
 		localPosition = RRWheel.Dummy.localPosition;
 		Vector3 vector3 = RRWheel.Dummy.parent.InverseTransformPoint(base.wheelColliders[1].GetVisualWheelPosition());
@@ -273,8 +295,8 @@ public class SolidAxleRearSuspension : Suspension
 		Vector3 vector4 = RRWheel.Dummy.parent.InverseTransformPoint(base.wheelColliders[1].GetVisualWheelPosition());
 		localPosition.x = vector4.x;
 		RRWheel.Dummy.localPosition = localPosition;
-		RRWheel.SteeringAxle.localEulerAngles = new Vector3(0f, 0f, (0f - num) * Controls.RearSteering.FloatValue);
-		if (DriveshaftStart != null)
+        ApplyRearVisualSteer(num);
+        if (DriveshaftStart != null)
 		{
 			DriveshaftStart.Rotate(0f, perFrameRotation, 0f);
 		}

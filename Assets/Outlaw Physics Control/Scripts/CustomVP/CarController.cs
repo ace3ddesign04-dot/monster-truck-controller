@@ -11,6 +11,7 @@ namespace CustomVP
         #region Self Righting System
         [Header("Side Self Right")]
         public bool sideSelfRightStuntActive = true;
+
         public float SideSelfRightMaxSpeed = 10f;
         public float SideSelfRightMinThrottle = 0.4f;
         public float SideSelfRightMinTilt = 0.75f;
@@ -36,23 +37,14 @@ namespace CustomVP
         private float sideSelfRightTimer = 0f;
 
         private bool IsTryingToSideSelfRight() {
-            
-            if (!sideSelfRightStuntActive)
-                return false;
 
-            // Side self-right should work if body OR wheels are touching the ground.
-            if (!TouchingGround && !Grounded())
+            if (!sideSelfRightStuntActive || (!TouchingGround && !Grounded()) || Mathf.Abs(Speed) > SideSelfRightMaxSpeed || Throttle < SideSelfRightMinThrottle || Mathf.Abs(LatTilt) < SideSelfRightMinTilt) {
+                EnableRearSteer = true;
+                
                 return false;
+            }
 
-            if (Mathf.Abs(Speed) > SideSelfRightMaxSpeed)
-                return false;
-
-            if (Throttle < SideSelfRightMinThrottle)
-                return false;
-
-            if (Mathf.Abs(LatTilt) < SideSelfRightMinTilt)
-                return false;
-
+            EnableRearSteer = false;
             return true;
         }
         private void DoSideSelfRight() {
@@ -417,6 +409,7 @@ namespace CustomVP
         }
 
         private void DoSideWheelieAssist() {
+            EnableRearSteer = true;
             if (sideSelfRightActive || IsTryingToSideSelfRight()) {
                 sideWheeliAssistEnabled = false;
                 return;
@@ -447,6 +440,7 @@ namespace CustomVP
                 return;
             }
 
+            EnableRearSteer = false;
             float currentRoll = Vector3.Dot(transform.right, Vector3.up);
             float targetRoll = leftGrounded ? SideWheelieTargetRoll : -SideWheelieTargetRoll;
 
@@ -699,6 +693,12 @@ namespace CustomVP
 
         [HideInInspector] public float Steering;
 
+        [Header("Rear Steering")]
+        public bool EnableRearSteer = true;
+        [Range(0f, 1f)] public float RearSteerLowSpeedMultiplier = 0.35f;
+        [Range(0f, 1f)] public float RearSteerHighSpeedMultiplier = 0.08f;
+        public float RearSteerFadeOutSpeed = 40f;
+
         [HideInInspector] public float InverseSteerMultiplier;
 
         public float xInput;
@@ -844,13 +844,15 @@ namespace CustomVP
                 }
             }
 
-            if (wheels.Count > 2)
-            {
+            if (wheels.Count > 2) {
                 wheels[0].steer = (wheels[1].steer = true);
+
+                wheels[2].steer = (wheels[3].steer = true);
                 wheels[2].inverseSteer = (wheels[3].inverseSteer = true);
                 wheels[2].handbrake = (wheels[3].handbrake = true);
-                if (wheels.Count > 4)
-                {
+
+                if (wheels.Count > 4) {
+                    wheels[4].steer = (wheels[5].steer = true);
                     wheels[4].inverseSteer = (wheels[5].inverseSteer = true);
                     wheels[4].handbrake = (wheels[5].handbrake = true);
                 }
@@ -1074,18 +1076,20 @@ namespace CustomVP
             {
                 carUIControl.loadOnOtherPlayerTrailerButton.SetActive(value: false);
                 carUIControl.unloadFromOtherPlayerTrailerButton.SetActive(loadedOnOtherPlayerTrailer);
-
-                if (vehicleDataManager.vehicleType != VehicleType.Bike && !loadedOnOtherPlayerTrailer &&
+                
+                if (vehicleDataManager.vehicleType != VehicleType.Bike && !loadedOnOtherPlayerTrailer && 
                     !waitingForTrailerResponse && !WinchManager.Instance.WinchMode &&
                     (myTrailer == null || (myTrailer != null && !myTrailer.connected))) {
                     PhotonView[] currentPlayerViews = MultiplayerManager.CurrentPlayerViews;
-                    foreach (PhotonView photonView in currentPlayerViews) {
-                        if (photonView != null && photonView.tView.trailer != null &&
-                            photonView.tView.carOnTrailer == null && photonView.tView.trailer.mpCarOnMe == null &&
-                            photonView.tView.trailer.mpConnected &&
-                            Vector3.Distance(transform.position, photonView.tView.trailer.transform.position) < 8f) {
-                            carUIControl.loadOnOtherPlayerTrailerButton.SetActive(value: true);
-                            ownerOfTrailer = photonView.tView;
+                    if (currentPlayerViews != null && currentPlayerViews.Length > 0) {
+                        foreach (PhotonView photonView in currentPlayerViews) {
+                            if (photonView != null && photonView.tView.trailer != null &&
+                                photonView.tView.carOnTrailer == null && photonView.tView.trailer.mpCarOnMe == null &&
+                                photonView.tView.trailer.mpConnected &&
+                                Vector3.Distance(transform.position, photonView.tView.trailer.transform.position) < 8f) {
+                                carUIControl.loadOnOtherPlayerTrailerButton.SetActive(value: true);
+                                ownerOfTrailer = photonView.tView;
+                            }
                         }
                     }
                 }
@@ -1904,6 +1908,10 @@ namespace CustomVP
             float target2 = Mathf.Lerp(maxSteeringAngle * 0.1f * xInput, maxSteeringAngle * xInput,
                 1f - Speed / leveledMaxSpeed * SteerLimitOnSpeed);
             Steering = Mathf.MoveTowards(Steering, target2, Time.fixedDeltaTime * 100f);
+
+            float rearSteerT = Mathf.Clamp01(Mathf.Abs(Speed) / RearSteerFadeOutSpeed);
+            InverseSteerMultiplier = EnableRearSteer ? Mathf.Lerp(RearSteerLowSpeedMultiplier, RearSteerHighSpeedMultiplier, rearSteerT) : 0f;
+
             if (SteeringWheel != null)
             {
                 SteeringWheel.localEulerAngles = new Vector3(0f, 0f,
