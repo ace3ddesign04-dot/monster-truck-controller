@@ -148,20 +148,20 @@ namespace CustomVP
                     wheels[i].wc.BrakeTorque = 0f;
                 }
 
-                localAngularVelocity.z = 0f;
-                m_Rigidbody.angularVelocity = transform.TransformVector(localAngularVelocity);
-
                 float currentRoll = Vector3.Dot(transform.right, Vector3.up);
 
-                float pitchAssist = SideSelfRightPitchDirection * SideSelfRightPitchForce
-                                    - pitchRate * SideSelfRightPitchDamping;
-                pitchAssist = Mathf.Clamp(
-                    pitchAssist,
-                    -SideSelfRightPitchMaxAssist,
-                    SideSelfRightPitchMaxAssist
-                );
+                float pitchAssist = SideSelfRightPitchDirection * SideSelfRightPitchForce - pitchRate * SideSelfRightPitchDamping;
+                pitchAssist = Mathf.Clamp(pitchAssist, -SideSelfRightPitchMaxAssist, SideSelfRightPitchMaxAssist);
 
-                float rollLockAssist = (sideSelfRightLockedRoll - currentRoll) * SideSelfRightPitchRollLockStrength;
+                float pitchT = Mathf.Clamp01(sideSelfRightTimer / SideSelfRightPitchPhaseDuration);
+
+                // stay hard on the side first, then smoothly allow it to come onto two tires
+                float unlockT = Mathf.InverseLerp(0.4f, 0.8f, pitchT);
+
+                localAngularVelocity.z = Mathf.Lerp(0f, localAngularVelocity.z, unlockT);
+                m_Rigidbody.angularVelocity = transform.TransformVector(localAngularVelocity);
+
+                float rollLockAssist = (sideSelfRightLockedRoll - currentRoll) * SideSelfRightPitchRollLockStrength * (1f - unlockT);
                 m_Rigidbody.AddRelativeTorque(pitchAssist, 0f, rollLockAssist, ForceMode.Acceleration);
                 return;
             }
