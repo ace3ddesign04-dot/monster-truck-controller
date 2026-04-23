@@ -36299,17 +36299,19 @@ MonoBehaviour:
   SideSelfRightMaxSpeed: 10
   SideSelfRightMinThrottle: 0.4
   SideSelfRightMinTilt: 0.75
-  SideSelfRightWheelTorque: 450
-  SideSelfRightBrakeMultiplier: 0.08
-  SideSelfRightRollAssist: 4
-  SideSelfRightRollDamping: 1.8
-  SideSelfRightMaxAssist: 6
+  SideSelfRightPitchPhaseDuration: 0.9
+  SideSelfRightPitchDirection: -1
+  SideSelfRightPitchForce: 18
+  SideSelfRightPitchDamping: 2
+  SideSelfRightPitchMaxAssist: 16
+  SideSelfRightRollAssist: 6
+  SideSelfRightRollDamping: 2.5
+  SideSelfRightMaxAssist: 10
+  SideSelfRightRecoverWheelTorque: 220
+  SideSelfRightRecoverBrakeMultiplier: 0.15
+  SideSelfRightPitchPhaseWheelGrip: 0.05
+  SideSelfRightAntirollMultiplier: 0.1
   sideSelfRightActive: 0
-  SideSelfRightPitchPhaseDuration: 2.5
-  SideSelfRightPitchForce: 100
-  SideSelfRightPitchDamping: 1
-  SideSelfRightPitchMaxAssist: 10
-  SideSelfRightFrontRearTorqueBias: 0.85
   donutStuntActive: 1
   DonutMinSpeed: 4
   DonutMaxSpeed: 22

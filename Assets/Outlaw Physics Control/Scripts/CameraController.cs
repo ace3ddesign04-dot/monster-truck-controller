@@ -23,6 +23,13 @@ public class CameraController : MonoBehaviour
     private bool donutCameraLocked;
     private float donutLockedXAngle;
 
+    [Header("Self Recovery Camera")]
+    public bool LockCameraDuringRecover = true;
+    public float RecoverCameraYAngle = 12f;
+    public float RecoverCameraDistance = 7f;
+    private bool recoverCameraLocked;
+    private float recoverLockedXAngle;
+
     public static CameraController Instance;
 
 	[HideInInspector]
@@ -187,6 +194,13 @@ public class CameraController : MonoBehaviour
             && Mathf.Abs(carController.xInput) > 0.9f
             && Mathf.Abs(carController.yInput) > 0.9f;
     }
+	private bool IsRecoverCameraActive() {
+		if (carController == null)
+			return false;
+
+		return carController.sideSelfRightActive && Mathf.Abs(carController.yInput) > 0.9f;
+
+    }
 
     public void Shake()
 	{
@@ -330,8 +344,9 @@ public class CameraController : MonoBehaviour
             case CameraMode.Follow:
                 if (carController != null) {
                     bool donutCam = LockCameraDuringDonut && IsDonutCameraActive();
+					bool recoverCam = LockCameraDuringRecover && IsRecoverCameraActive();
 
-                    if (donutCam) {
+                    if (donutCam || recoverCam) {
                         if (!donutCameraLocked) {
                             donutCameraLocked = true;
                             donutLockedXAngle = CurrentXAngle;

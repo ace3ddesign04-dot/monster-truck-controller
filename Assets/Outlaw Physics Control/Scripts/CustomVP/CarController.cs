@@ -1,130 +1,570 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityStandardAssets.CrossPlatformInput;
 
-namespace CustomVP
-{
-    public class CarController : MonoBehaviour
-    {
+namespace CustomVP {
+    public class CarController : MonoBehaviour {
         public bool vehicleIsActive;
 
-        #region Self Righting System
+        #region Auto Backflip
+        [Header("Auto Backflip")]
+        public bool EnableAutoBackflip = true;
+        public string BackflipLaunchTag = "BackflipLaunch";
+        public float BackflipArmMemory = 0.35f;
+        public float BackflipMinLaunchSpeed = 8f;
+
+        public float BackflipTargetAngle = 360f;
+
+        public float BackflipPitchRateGain = 12f;
+        public float BackflipPitchDamping = 3f;
+        public float BackflipMaxPitchAssist = 35f;
+
+        public float BackflipYawGain = 6f;
+        public float BackflipYawDamping = 3f;
+
+        public float BackflipRollGain = 10f;
+        public float BackflipRollDamping = 4f;
+        public float BackflipMaxLateralAssist = 18f;
+
+        public float BackflipPredictionMaxTime = 2.5f;
+        public float BackflipPredictionStep = 0.05f;
+        public float BackflipGroundProbeRadius = 0.8f;
+        public float BackflipGroundProbeHeight = 1.0f;
+        public LayerMask BackflipLandingMask = ~0;
+
+        public float BackflipExtraHangForce = 0.8f;
+        public float BackflipExtraHangDuration = 0.18f;
+
+        public float BackflipCruisePitchRateDeg = 240f;
+        public float BackflipCorrectionStartAngle = 300f;
+        public float BackflipYawRollCorrectionStartAngle = 320f;
+
+        public float BackflipMinSolvePitchRateDeg = 140f;
+        public float BackflipMaxSolvePitchRateDeg = 280f;
+
+        public bool EnableSpeedBasedDoubleBackflip = true;
+        public float DoubleBackflipSpeedThreshold = 42f;
+
+        public float SingleBackflipTargetAngle = 360f;
+        public float DoubleBackflipTargetAngle = 720f;
+
+        public float BackflipLandingCatchStartAngle = 40f;   // start catch when this much angle remains
+        public float BackflipLandingCatchPitchDamping = 10f;
+
+        public float BackflipLandingCatchYawGain = 8f;
+        public float BackflipLandingCatchYawDamping = 4f;
+
+        public float BackflipLandingCatchRollGain = 16f;
+        public float BackflipLandingCatchRollDamping = 6f;
+        public float BackflipLandingCatchMaxAssist = 18f;
+
+        private float currentBackflipTargetAngle = 360f;
+        private bool autoBackflipLandingCatchActive = false;
+
+        private bool backflipArmed = false;
+        private float backflipArmTime = -999f;
+        private bool autoBackflipActive = false;
+        private bool wasGroundedLastFrame = false;
+
+        private Vector3 backflipLaunchForwardFlat;
+        private float backflipAccumulatedAngle = 0f;
+        private float backflipHangTimer = 0f;
+
+        private bool IsBodyTouchingWithoutWheels() {
+            return TouchingGround && !Grounded();
+        }
+        private void StartAutoBackflip() {
+            autoBackflipActive = true;
+            autoBackflipLandingCatchActive = false;
+            backflipArmed = false;
+            backflipAccumulatedAngle = 0f;
+            backflipHangTimer = 0f;
+
+            currentBackflipTargetAngle =
+                (EnableSpeedBasedDoubleBackflip && Mathf.Abs(Speed) >= DoubleBackflipSpeedThreshold)
+                ? DoubleBackflipTargetAngle
+                : SingleBackflipTargetAngle;
+
+            backflipLaunchForwardFlat = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (backflipLaunchForwardFlat.sqrMagnitude < 0.0001f)
+                backflipLaunchForwardFlat = transform.forward;
+            backflipLaunchForwardFlat.Normalize();
+        }
+
+        private void StopAutoBackflip() {
+            autoBackflipActive = false;
+            autoBackflipLandingCatchActive = false;
+            backflipAccumulatedAngle = 0f;
+            backflipHangTimer = 0f;
+        }
+
+        private float PredictBackflipTimeToGround() {
+            Vector3 start = m_Rigidbody.worldCenterOfMass + Vector3.up * BackflipGroundProbeHeight;
+            Vector3 velocity = m_Rigidbody.velocity;
+
+            for (float t = BackflipPredictionStep; t <= BackflipPredictionMaxTime; t += BackflipPredictionStep) {
+                Vector3 futurePos = start + velocity * t + 0.5f * Physics.gravity * t * t;
+
+                RaycastHit hit;
+                if (Physics.SphereCast(
+                        futurePos,
+                        BackflipGroundProbeRadius,
+                        Vector3.down,
+                        out hit,
+                        BackflipGroundProbeHeight * 2f,
+                        BackflipLandingMask,
+                        QueryTriggerInteraction.Ignore)) {
+                    return t;
+                }
+            }
+
+            return -1f;
+        }
+
+        private bool UpdateAutoBackflip() {
+            if (!autoBackflipActive)
+                return false;
+
+            if (IsBodyTouchingWithoutWheels()) {
+                StopAutoBackflip();
+                autoBackflipLandingCatchActive = false;
+                return false;
+            }
+
+            if (Grounded()) {
+                StopAutoBackflip();
+                return false;
+            }
+
+            Vector3 localAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
+
+            // negative local X = backflip in your setup
+            float currentBackflipRateDeg = Mathf.Max(0f, -localAngularVelocity.x * Mathf.Rad2Deg);
+            backflipAccumulatedAngle += currentBackflipRateDeg * Time.fixedDeltaTime;
+            backflipAccumulatedAngle = Mathf.Min(backflipAccumulatedAngle, currentBackflipTargetAngle);
+
+            float timeToGround = PredictBackflipTimeToGround();
+            if (timeToGround < 0f)
+                timeToGround = 0.45f;
+
+            timeToGround = Mathf.Max(0.12f, timeToGround);
+
+            float remainingAngle = Mathf.Max(0f, currentBackflipTargetAngle - backflipAccumulatedAngle);
+
+            float pitchBlend = Mathf.InverseLerp(
+                currentBackflipTargetAngle - 60f,
+                currentBackflipTargetAngle,
+                backflipAccumulatedAngle
+            );
+
+            float solvePitchRateDeg = Mathf.Clamp(
+                remainingAngle / timeToGround,
+                BackflipMinSolvePitchRateDeg,
+                BackflipMaxSolvePitchRateDeg
+            );
+
+            float desiredPitchRateDeg = Mathf.Lerp(
+                BackflipCruisePitchRateDeg,
+                solvePitchRateDeg,
+                pitchBlend
+            );
+
+            float desiredPitchRateRad = -desiredPitchRateDeg * Mathf.Deg2Rad;
+
+            float pitchAssist =
+                (desiredPitchRateRad - localAngularVelocity.x) * BackflipPitchRateGain
+                - localAngularVelocity.x * BackflipPitchDamping;
+
+            pitchAssist = Mathf.Clamp(
+                pitchAssist,
+                -BackflipMaxPitchAssist,
+                BackflipMaxPitchAssist
+            );
+
+            Vector3 flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (flatForward.sqrMagnitude < 0.0001f)
+                flatForward = backflipLaunchForwardFlat;
+            else
+                flatForward.Normalize();
+
+            float lateralBlend = Mathf.InverseLerp(
+                currentBackflipTargetAngle - 40f,
+                currentBackflipTargetAngle,
+                backflipAccumulatedAngle
+            );
+
+            float yawError = Vector3.SignedAngle(flatForward, backflipLaunchForwardFlat, Vector3.up);
+            float yawAssist =
+                (yawError * Mathf.Deg2Rad * BackflipYawGain
+                - localAngularVelocity.y * BackflipYawDamping) * lateralBlend;
+
+            yawAssist = Mathf.Clamp(
+                yawAssist,
+                -BackflipMaxLateralAssist,
+                BackflipMaxLateralAssist
+            );
+
+            float rollAssist =
+                ((-LatTilt) * BackflipRollGain
+                - localAngularVelocity.z * BackflipRollDamping) * lateralBlend;
+
+            rollAssist = Mathf.Clamp(
+                rollAssist,
+                -BackflipMaxLateralAssist,
+                BackflipMaxLateralAssist
+            );
+
+            if (BackflipExtraHangForce > 0f &&
+                backflipHangTimer < BackflipExtraHangDuration &&
+                pitchBlend < 0.35f) {
+                m_Rigidbody.AddForce(-Physics.gravity * BackflipExtraHangForce, ForceMode.Acceleration);
+                backflipHangTimer += Time.fixedDeltaTime;
+            }
+
+            m_Rigidbody.AddRelativeTorque(pitchAssist, yawAssist, rollAssist, ForceMode.Acceleration);
+
+            // hand over to landing catch near the end
+            if (remainingAngle <= BackflipLandingCatchStartAngle) {
+                autoBackflipActive = false;
+                autoBackflipLandingCatchActive = true;
+            }
+
+            return true;
+        }
+        private bool UpdateAutoBackflipLandingCatch() {
+            if (!autoBackflipLandingCatchActive)
+                return false;
+
+            if (IsBodyTouchingWithoutWheels()) {
+                StopAutoBackflip();
+                autoBackflipLandingCatchActive = false;
+                return false;
+            }
+
+            if (Grounded()) {
+                StopAutoBackflip();
+                return false;
+            }
+
+            Vector3 localAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
+
+            // kill remaining pitch speed so it does not continue into extra flips
+            float pitchAssist = -localAngularVelocity.x * BackflipLandingCatchPitchDamping;
+
+            Vector3 flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (flatForward.sqrMagnitude < 0.0001f)
+                flatForward = backflipLaunchForwardFlat;
+            else
+                flatForward.Normalize();
+
+            float yawError = Vector3.SignedAngle(flatForward, backflipLaunchForwardFlat, Vector3.up);
+            float yawAssist =
+                yawError * Mathf.Deg2Rad * BackflipLandingCatchYawGain
+                - localAngularVelocity.y * BackflipLandingCatchYawDamping;
+
+            yawAssist = Mathf.Clamp(
+                yawAssist,
+                -BackflipLandingCatchMaxAssist,
+                BackflipLandingCatchMaxAssist
+            );
+
+            float rollAssist =
+                (-LatTilt) * BackflipLandingCatchRollGain
+                - localAngularVelocity.z * BackflipLandingCatchRollDamping;
+
+            rollAssist = Mathf.Clamp(
+                rollAssist,
+                -BackflipLandingCatchMaxAssist,
+                BackflipLandingCatchMaxAssist
+            );
+
+            m_Rigidbody.AddRelativeTorque(pitchAssist, yawAssist, rollAssist, ForceMode.Acceleration);
+            return true;
+        }
+        #endregion
+
+        #region Upside Down To Side Roll
+        [Header("Upside Down To Side Roll")]
+        public bool EnableUpsideDownToSideRoll = true;
+        public float UpsideDownRollMaxSpeed = 8f;
+        public float UpsideDownRollMinThrottle = 0.25f;
+        public float UpsideDownDetectUpDot = -0.75f;     // roof-down detection
+        public float UpsideDownReleaseUpDot = -0.25f;    // stop helper once it has rolled enough
+        public float UpsideDownRollForce = 8f;
+        public float UpsideDownRollDamping = 2.5f;
+        public float UpsideDownRollMaxAssist = 10f;
+        public float UpsideDownPitchDamping = 1.2f;
+        public float UpsideDownYawDamping = 1.0f;
+        public float UpsideDownPreferredDirection = 1f;  // 1 or -1
+
+        private bool upsideDownRollActive = false;
+        private float upsideDownRollDirection = 1f;
+
+        private bool IsUpsideDownOnRoof() {
+            if (!EnableUpsideDownToSideRoll)
+                return false;
+
+            // body touching ground, but wheels not touching ground
+            if (!TouchingGround)
+                return false;
+
+            if (Grounded())
+                return false;
+
+            if (transform.up.y > UpsideDownDetectUpDot)
+                return false;
+
+            if (Mathf.Abs(Speed) > UpsideDownRollMaxSpeed)
+                return false;
+
+            if (Throttle < UpsideDownRollMinThrottle)
+                return false;
+
+            return true;
+        }
+
+        private void DoUpsideDownToSideRoll() {
+            upsideDownRollActive = false;
+
+            if (!IsUpsideDownOnRoof())
+                return;
+
+            upsideDownRollActive = true;
+
+            //EnableRearSteer = false;
+            EnableSideWheelieAssist = false;
+            EnableSideWheelieCOMShift = false;
+
+            sideWheelieCOMState = 0;
+            sideWheelieReleaseTimer = 0f;
+            sideWheelieIntentTimer = 0f;
+            sideWheelieIntentDirection = 0;
+            donutIntentTimer = 0f;
+
+            // choose a stable roll direction
+            if (Mathf.Abs(LatTilt) > 0.05f) {
+                upsideDownRollDirection = Mathf.Sign(LatTilt);
+            }
+            else if (Mathf.Abs(xInput) > 0.2f) {
+                upsideDownRollDirection = Mathf.Sign(xInput);
+            }
+            else if (Mathf.Abs(upsideDownRollDirection) < 0.5f) {
+                upsideDownRollDirection = Mathf.Sign(UpsideDownPreferredDirection);
+            }
+
+            Vector3 localAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
+            float pitchRate = localAngularVelocity.x;
+            float yawRate = localAngularVelocity.y;
+            float rollRate = localAngularVelocity.z;
+
+            float rollAssist = upsideDownRollDirection * UpsideDownRollForce - rollRate * UpsideDownRollDamping;
+            rollAssist = Mathf.Clamp(rollAssist, -UpsideDownRollMaxAssist, UpsideDownRollMaxAssist);
+
+            float pitchAssist = -pitchRate * UpsideDownPitchDamping;
+            float yawAssist = -yawRate * UpsideDownYawDamping;
+
+            m_Rigidbody.AddRelativeTorque(pitchAssist, yawAssist, rollAssist, ForceMode.Acceleration);
+        }
+        #endregion
+
+        #region Side Self Right
         [Header("Side Self Right")]
         public bool sideSelfRightStuntActive = true;
-
         public float SideSelfRightMaxSpeed = 10f;
         public float SideSelfRightMinThrottle = 0.4f;
         public float SideSelfRightMinTilt = 0.75f;
 
-        public float SideSelfRightWheelTorque = 250f;
-        public float SideSelfRightBrakeMultiplier = 0.15f;
+        public float SideSelfRightPitchPhaseDuration = 1.0f;
+        public float SideSelfRightPitchDirection = -1f;
+
+        public float SideSelfRightPitchForce = 18f;
+        public float SideSelfRightPitchDamping = 2f;
+        public float SideSelfRightPitchMaxAssist = 16f;
+        public float SideSelfRightPitchRollLockStrength = 24f;
 
         public float SideSelfRightRollAssist = 6f;
         public float SideSelfRightRollDamping = 2.5f;
-        public float SideSelfRightMaxAssist = 8f;
+        public float SideSelfRightMaxAssist = 10f;
+
+        public float SideSelfRightRecoverWheelTorque = 220f;
+        public float SideSelfRightRecoverBrakeMultiplier = 0.15f;
+
+        [Range(0f, 1f)] public float SideSelfRightPitchPhaseWheelGrip = 0.05f;
+        [Range(0f, 1f)] public float SideSelfRightAntirollMultiplier = 0.10f;
 
         public bool sideSelfRightActive;
 
-        public float SideSelfRightPitchPhaseDuration = 0.45f;
-        private float SideSelfRightPitchDirection = -1f;
-
-        public float SideSelfRightPitchForce = 14f;
-        public float SideSelfRightPitchDamping = 1.2f;
-        public float SideSelfRightPitchMaxAssist = 12f;
-
-        public float SideSelfRightFrontRearTorqueBias = 0.65f;
-
         private float sideSelfRightTimer = 0f;
+        private bool sideSelfRightLatched = false;
+        private bool sideSelfRightLowGripApplied = false;
+        private float sideSelfRightLockedRoll = 0f;
 
-        private bool IsTryingToSideSelfRight() {
+        private float GetCurrentLatTilt() {
+            Vector3 flatRight = Vector3.ProjectOnPlane(transform.right, Vector3.up);
+            float latTilt = (transform.right - flatRight).y;
 
-            if (!sideSelfRightStuntActive || (!TouchingGround && !Grounded()) || Mathf.Abs(Speed) > SideSelfRightMaxSpeed || Throttle < SideSelfRightMinThrottle || Mathf.Abs(LatTilt) < SideSelfRightMinTilt) {
-                EnableRearSteer = true;
-                
+            if (transform.up.y < 0f)
+                latTilt = -latTilt;
+
+            return latTilt;
+        }
+
+        private bool CanStartSideSelfRight() {
+            float currentLatTilt = GetCurrentLatTilt();
+
+            if (!sideSelfRightStuntActive)
                 return false;
-            }
 
-            EnableRearSteer = false;
+            if (!TouchingGround && !Grounded())
+                return false;
+
+            if (Mathf.Abs(Speed) > SideSelfRightMaxSpeed)
+                return false;
+
+            if (Throttle < SideSelfRightMinThrottle)
+                return false;
+
+            if (Mathf.Abs(currentLatTilt) < SideSelfRightMinTilt)
+                return false;
+
             return true;
+        }
+
+        private void SetSelfRightWheelGrip(float grip) {
+            for (int i = 0; i < wheels.Count; i++) {
+                if (wheels[i].wc == null)
+                    continue;
+
+                wheels[i].wc.forwardFrictionCoefficient = grip;
+                wheels[i].wc.sideFrictionCoefficient = grip;
+                wheels[i].wc.UpdateFriction();
+            }
+        }
+
+        private void RestoreSelfRightWheelGrip() {
+            if (!sideSelfRightLowGripApplied)
+                return;
+
+            SetSelfRightWheelGrip(1f);
+            sideSelfRightLowGripApplied = false;
         }
         private void DoSideSelfRight() {
             sideSelfRightActive = false;
+            
+            if (upsideDownRollActive)
+                return;
 
-            if (!IsTryingToSideSelfRight()) {
+            if (!sideSelfRightLatched) {
+                if (!CanStartSideSelfRight()) {
+                    sideSelfRightTimer = 0f;
+                    RestoreSelfRightWheelGrip();
+                    return;
+                }
+
+                sideSelfRightLatched = true;
                 sideSelfRightTimer = 0f;
+                sideSelfRightLockedRoll = Vector3.Dot(transform.right, Vector3.up);
+            }
+
+            if ((!TouchingGround && !Grounded()) ||
+                Mathf.Abs(Speed) > SideSelfRightMaxSpeed ||
+                Throttle < SideSelfRightMinThrottle) {
+                sideSelfRightLatched = false;
+                sideSelfRightTimer = 0f;
+                RestoreSelfRightWheelGrip();
                 return;
             }
 
             sideSelfRightActive = true;
             sideSelfRightTimer += Time.fixedDeltaTime;
 
+            EnableRearSteer = false;
             EnableSideWheelieAssist = false;
             EnableSideWheelieCOMShift = false;
+
+            sideWheelieCOMState = 0;
+            sideWheelieReleaseTimer = 0f;
+            sideWheelieIntentTimer = 0f;
+            sideWheelieIntentDirection = 0;
             donutIntentTimer = 0f;
 
-            // Based on your measured values:
-            // left side down  => LatTilt < 0
-            // right side down => LatTilt > 0
-            bool leftSideDown = LatTilt < 0f;
-
+            float currentLatTilt = GetCurrentLatTilt();
+            bool leftSideDown = currentLatTilt < 0f;
             bool pitchPhase = sideSelfRightTimer < SideSelfRightPitchPhaseDuration;
-            int recoverySideGroundedWheels = 0;
-
-            for (int i = 0; i < wheels.Count; i++) {
-                if (wheels[i].wc == null || wheels[i].wc.wheelCollider == null)
-                    continue;
-
-                bool isLeftWheel = (i == 0 || i == 2);
-                bool isFrontWheel = (i == 0 || i == 1);
-                bool isRecoverySideWheel = leftSideDown ? isLeftWheel : !isLeftWheel;
-
-                if (!isRecoverySideWheel)
-                    continue;
-
-                if (wheels[i].wc.IsGrounded)
-                    recoverySideGroundedWheels++;
-
-                float torqueBias = 1f;
-
-                // Phase 1: force front/rear torque imbalance to create visible X-axis rotation.
-                if (pitchPhase) {
-                    float signedBias = Mathf.Sign(SideSelfRightPitchDirection);
-
-                    if (isFrontWheel)
-                        torqueBias += SideSelfRightFrontRearTorqueBias * signedBias;
-                    else
-                        torqueBias -= SideSelfRightFrontRearTorqueBias * signedBias;
-                }
-
-                wheels[i].wc.BrakeTorque *= SideSelfRightBrakeMultiplier;
-                wheels[i].wc.MotorTorque = SideSelfRightWheelTorque * torqueBias * Mathf.Sign(Throttle);
-            }
 
             Vector3 localAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
             float pitchRate = localAngularVelocity.x;
             float rollRate = localAngularVelocity.z;
 
-            float pitchAssist = 0f;
-            float rollAssist = 0f;
-
-            // Phase 1: ONLY pitch
             if (pitchPhase) {
-                pitchAssist = SideSelfRightPitchDirection * SideSelfRightPitchForce - pitchRate * SideSelfRightPitchDamping;
-                pitchAssist = Mathf.Clamp(pitchAssist, -SideSelfRightPitchMaxAssist, SideSelfRightPitchMaxAssist);
-            }
-            // Phase 2: ONLY roll upright
-            else {
+                if (!sideSelfRightLowGripApplied) {
+                    SetSelfRightWheelGrip(SideSelfRightPitchPhaseWheelGrip);
+                    sideSelfRightLowGripApplied = true;
+                }
+
+                for (int i = 0; i < wheels.Count; i++) {
+                    if (wheels[i].wc == null || wheels[i].wc.wheelCollider == null)
+                        continue;
+
+                    wheels[i].wc.MotorTorque = 0f;
+                    wheels[i].wc.BrakeTorque = 0f;
+                }
+
                 float currentRoll = Vector3.Dot(transform.right, Vector3.up);
-                rollAssist = (-currentRoll) * SideSelfRightRollAssist - rollRate * SideSelfRightRollDamping;
 
-                if (recoverySideGroundedWheels == 0)
-                    rollAssist *= 1.25f;
+                float pitchAssist = SideSelfRightPitchDirection * SideSelfRightPitchForce - pitchRate * SideSelfRightPitchDamping;
+                pitchAssist = Mathf.Clamp(pitchAssist, -SideSelfRightPitchMaxAssist, SideSelfRightPitchMaxAssist);
 
-                rollAssist = Mathf.Clamp(rollAssist, -SideSelfRightMaxAssist, SideSelfRightMaxAssist);
+                float pitchT = Mathf.Clamp01(sideSelfRightTimer / SideSelfRightPitchPhaseDuration);
+
+                // stay hard on the side first, then smoothly allow it to come onto two tires
+                float unlockT = Mathf.InverseLerp(0.4f, 0.8f, pitchT);
+
+                localAngularVelocity.z = Mathf.Lerp(0f, localAngularVelocity.z, unlockT);
+                m_Rigidbody.angularVelocity = transform.TransformVector(localAngularVelocity);
+
+                float rollLockAssist = (sideSelfRightLockedRoll - currentRoll) * SideSelfRightPitchRollLockStrength * (1f - unlockT);
+                m_Rigidbody.AddRelativeTorque(pitchAssist, 0f, rollLockAssist, ForceMode.Acceleration);
+                return;
             }
 
-            m_Rigidbody.AddRelativeTorque(pitchAssist, 0f, rollAssist, ForceMode.Acceleration);
+            RestoreSelfRightWheelGrip();
+
+            for (int i = 0; i < wheels.Count; i++) {
+                if (wheels[i].wc == null || wheels[i].wc.wheelCollider == null)
+                    continue;
+
+                wheels[i].wc.MotorTorque = 0f;
+                wheels[i].wc.BrakeTorque = 0f;
+
+                bool isLeftWheel = (i == 0 || i == 2);
+                bool isRecoverySideWheel = leftSideDown ? isLeftWheel : !isLeftWheel;
+
+                if (!isRecoverySideWheel)
+                    continue;
+
+                wheels[i].wc.BrakeTorque = currentBrakeTorque * SideSelfRightRecoverBrakeMultiplier;
+                wheels[i].wc.MotorTorque = SideSelfRightRecoverWheelTorque * Mathf.Sign(Throttle);
+            }
+
+            float currentRoll2 = Vector3.Dot(transform.right, Vector3.up);
+            float rollAssist = (-currentRoll2) * SideSelfRightRollAssist
+                               - rollRate * SideSelfRightRollDamping;
+            rollAssist = Mathf.Clamp(
+                rollAssist,
+                -SideSelfRightMaxAssist,
+                SideSelfRightMaxAssist
+            );
+
+            m_Rigidbody.AddRelativeTorque(0f, 0f, rollAssist, ForceMode.Acceleration);
+
+            if (Mathf.Abs(currentRoll2) < 0.18f && Grounded()) {
+                sideSelfRightLatched = false;
+                sideSelfRightTimer = 0f;
+                RestoreSelfRightWheelGrip();
+            }
         }
+
         #endregion
 
         #region Donut Stunt
@@ -147,7 +587,7 @@ namespace CustomVP
         public float donutIntentTime = 3.0f;
 
         private bool UpdateDonutIntent() {
-            if (!donutStuntActive || sideSelfRightActive || IsTryingToSideSelfRight()) {
+            if (!donutStuntActive || sideSelfRightActive) {
                 return false;
             }
 
@@ -164,7 +604,7 @@ namespace CustomVP
         }
 
         private void ApplyDonutFriction(bool active) {
-            if (!donutStuntActive || sideSelfRightActive || IsTryingToSideSelfRight())
+            if (!donutStuntActive || sideSelfRightActive)
                 return;
 
             for (int i = 0; i < wheels.Count; i++) {
@@ -185,7 +625,7 @@ namespace CustomVP
         }
 
         private void DoDonutAssist() {
-            if (!donutStuntActive || sideSelfRightActive || IsTryingToSideSelfRight())
+            if (!donutStuntActive || sideSelfRightActive)
                 return;
 
             bool donutActive = UpdateDonutIntent();
@@ -249,10 +689,13 @@ namespace CustomVP
         public float SideWheelieMaxAssist = 20f;
 
         public bool sideWheeliAssistEnabled;
-        
+
         private void UpdateSideWheelieIntent() {
-            if (!sideWheeliStuntActive)
+            if (!sideWheeliStuntActive || sideSelfRightActive) {
+                sideWheelieIntentTimer = 0f;
+                sideWheelieIntentDirection = 0;
                 return;
+            }
 
             sideWheelieIntentDirection = 0;
 
@@ -383,6 +826,9 @@ namespace CustomVP
         private Vector3 GetTargetCenterOfMass() {
             Vector3 baseCOM = (comBase != null) ? comBase.localPosition : manualCenterOfMass;
 
+            if (sideSelfRightActive)
+                return baseCOM;
+
             if (!EnableSideWheelieCOMShift || !useManualCenterOfMass)
                 return baseCOM;
 
@@ -409,18 +855,18 @@ namespace CustomVP
         }
 
         private void DoSideWheelieAssist() {
-            EnableRearSteer = true;
-            if (sideSelfRightActive || IsTryingToSideSelfRight()) {
+            if (sideSelfRightActive) {
                 sideWheeliAssistEnabled = false;
                 return;
             }
+
+            EnableRearSteer = true;
 
             if (!sideWheeliStuntActive || !EnableSideWheelieAssist || wheels.Count < 4) {
                 sideWheeliAssistEnabled = false;
                 return;
             }
 
-            // Do not assist unless side-wheelie state / COM shift is already active
             if (sideWheelieCOMState == 0) {
                 sideWheeliAssistEnabled = false;
                 return;
@@ -434,7 +880,6 @@ namespace CustomVP
                 return;
             }
 
-            // While already in wheelie state, use hold speed, not entry speed
             if (Mathf.Abs(Speed) < SideWheelieHoldMinSpeed) {
                 sideWheeliAssistEnabled = false;
                 return;
@@ -477,7 +922,7 @@ namespace CustomVP
 
         [HideInInspector] public TrailerController myTrailer;
 
-        [Header("Setup")] [SerializeField] public List<_Wheel> wheels;
+        [Header("Setup")][SerializeField] public List<_Wheel> wheels;
 
         public Collider[] BodyColliders;
 
@@ -537,7 +982,7 @@ namespace CustomVP
 
         private float InteraxleDiffLockRatio = 1f;
 
-        [Space(10f)] [Header("Handling")] public bool FWD;
+        [Space(10f)][Header("Handling")] public bool FWD;
 
         public bool RWD;
 
@@ -563,7 +1008,7 @@ namespace CustomVP
 
         private float LeveledMaxSpeed;
 
-        [Space(10f)] [Range(0f, 4f)] public int EngineBlockStage;
+        [Space(10f)][Range(0f, 4f)] public int EngineBlockStage;
 
         [Range(0f, 4f)] public int HeadStage;
 
@@ -603,7 +1048,7 @@ namespace CustomVP
 
         [Range(0f, 1f)] public int Ebrake;
 
-        [Space(10f)] [Header("Engine tuning")] public bool TuningEnginePurchased;
+        [Space(10f)][Header("Engine tuning")] public bool TuningEnginePurchased;
 
         public bool PerfectSetupPurchased;
 
@@ -615,7 +1060,8 @@ namespace CustomVP
 
         public float PerfectTimingRatio;
 
-        [Space(10f)] [Header("Stability")]
+        [Space(10f)]
+        [Header("Stability")]
         [Range(0f, 10000f)] public float FrontLateralAntiroll = 10000f;
         [Range(0f, 10000f)] public float RearLateralAntiroll = 10000f;
 
@@ -627,7 +1073,7 @@ namespace CustomVP
 
         public bool PreventFromSideSliding = true;
 
-        [Space(10f)] [Range(0f, 50f)] public float SelfAlignForceX;
+        [Space(10f)][Range(0f, 50f)] public float SelfAlignForceX;
 
         [Range(0f, 50f)] public float SelfAlignForceZ;
 
@@ -659,7 +1105,7 @@ namespace CustomVP
 
         private bool TouchingGround;
 
-        [Space(10f)] [Header("Friction")] public float SurfaceManagerDataUpdateInterval = 1f;
+        [Space(10f)][Header("Friction")] public float SurfaceManagerDataUpdateInterval = 1f;
 
         [HideInInspector] public int FrontInstalledTiresID;
 
@@ -729,13 +1175,10 @@ namespace CustomVP
 
         public float CurrentTorque;
 
-        public float AverageRPM
-        {
-            get
-            {
+        public float AverageRPM {
+            get {
                 float num = 0f;
-                for (int i = 0; i < wheels.Count; i++)
-                {
+                for (int i = 0; i < wheels.Count; i++) {
                     num += wheels[i].wc.wheelCollider.perFrameRotation;
                 }
 
@@ -743,8 +1186,7 @@ namespace CustomVP
             }
         }
 
-        private void Start()
-        {
+        private void Start() {
             if (comBase != null) {
                 manualCenterOfMass = comBase.localPosition;
             }
@@ -760,14 +1202,11 @@ namespace CustomVP
             lowestPointOfCollider = Vector3.zero;
             lowestPointOfCollider =
                 BodyColliders[0].ClosestPoint(BodyColliders[0].transform.position - transform.up * 10f);
-            if (BodyColliders.Length > 1)
-            {
-                for (int i = 0; i < BodyColliders.Length; i++)
-                {
+            if (BodyColliders.Length > 1) {
+                for (int i = 0; i < BodyColliders.Length; i++) {
                     Vector3 vector = BodyColliders[i]
                         .ClosestPoint(BodyColliders[i].transform.position - transform.up * 10f);
-                    if (vector.y < lowestPointOfCollider.y)
-                    {
+                    if (vector.y < lowestPointOfCollider.y) {
                         lowestPointOfCollider = BodyColliders[i]
                             .ClosestPoint(BodyColliders[i].transform.position - transform.up * 10f);
                     }
@@ -777,69 +1216,56 @@ namespace CustomVP
             lowestPointOfCollider = transform.InverseTransformPoint(lowestPointOfCollider);
             SetCalculatedCOM();
             CarController[] array = FindObjectsOfType<CarController>();
-            foreach (CarController carController in array)
-            {
-                if (carController != this && carController.enabled)
-                {
+            foreach (CarController carController in array) {
+                if (carController != this && carController.enabled) {
                     enabled = false;
                     return;
                 }
             }
 
             SetupFrictionValues();
-            if (carUIControl != null)
-            {
+            if (carUIControl != null) {
                 int selectedPosition = (!LowGear) ? 1 : 0;
                 carUIControl.SetupGearButton(selectedPosition);
                 int selectedPosition2 = 0;
-                if (RearDiffLock)
-                {
+                if (RearDiffLock) {
                     selectedPosition2 = 1;
                 }
 
-                if (FrontDiffLock)
-                {
+                if (FrontDiffLock) {
                     selectedPosition2 = 2;
                 }
 
-                if (InteraxleDiffLock)
-                {
+                if (InteraxleDiffLock) {
                     selectedPosition2 = 3;
                 }
 
                 carUIControl.SetupDiffLockButton(selectedPosition2);
                 int selectedPosition3 = 0;
-                if (FWD)
-                {
+                if (FWD) {
                     selectedPosition3 = 1;
                 }
 
-                if (FWD && RWD)
-                {
+                if (FWD && RWD) {
                     selectedPosition3 = 2;
                 }
 
                 carUIControl.SetupDriveButton(selectedPosition3);
-                if (vehicleDataManager.vehicleType == VehicleType.Bike)
-                {
+                if (vehicleDataManager.vehicleType == VehicleType.Bike) {
                     carUIControl.HideAllDrivetrainOptions();
                 }
             }
 
             PartGroup partGroup = null;
-            if (bodyPartsSwitcher != null && bodyPartsSwitcher.partGroups != null)
-            {
-                for (int k = 0; k < bodyPartsSwitcher.partGroups.Length; k++)
-                {
-                    if (bodyPartsSwitcher.partGroups[k].partType == PartType.Snorkel)
-                    {
+            if (bodyPartsSwitcher != null && bodyPartsSwitcher.partGroups != null) {
+                for (int k = 0; k < bodyPartsSwitcher.partGroups.Length; k++) {
+                    if (bodyPartsSwitcher.partGroups[k].partType == PartType.Snorkel) {
                         partGroup = bodyPartsSwitcher.partGroups[k];
                         break;
                     }
                 }
 
-                if (partGroup != null && partGroup.InstalledPart > 0)
-                {
+                if (partGroup != null && partGroup.InstalledPart > 0) {
                     HasSnorkel = true;
                 }
             }
@@ -858,22 +1284,19 @@ namespace CustomVP
                 }
             }
 
-            if (wheels.Count == 2)
-            {
+            if (wheels.Count == 2) {
                 wheels[0].steer = true;
                 wheels[1].handbrake = true;
             }
 
             OnValidate();
-            if (engine != null)
-            {
+            if (engine != null) {
                 engine.SetDiesel(DieselStage == 4);
                 engine.PurchasedTurbo = (TurboStage > 0);
             }
 
             Collider[] bodyColliders = BodyColliders;
-            foreach (Collider collider in bodyColliders)
-            {
+            foreach (Collider collider in bodyColliders) {
                 collider.material = (PhysicMaterial)Resources.Load("Physics/TruckCollider");
                 collider.gameObject.layer = 26;
             }
@@ -881,13 +1304,10 @@ namespace CustomVP
             IsSlideThrottle = DataStore.GetBool("SlideAccelerator");
             CarController[] array2 = FindObjectsOfType<CarController>();
             int num = 0;
-            while (true)
-            {
-                if (num < array2.Length)
-                {
+            while (true) {
+                if (num < array2.Length) {
                     CarController carController2 = array2[num];
-                    if (carController2 != this && carController2.enabled)
-                    {
+                    if (carController2 != this && carController2.enabled) {
                         break;
                     }
 
@@ -903,37 +1323,34 @@ namespace CustomVP
             enabled = false;
         }
 
-        private void OnTriggerEnter(Collider other)
-        {
+        private void OnTriggerEnter(Collider other) {
             Checkpoint component = other.GetComponent<Checkpoint>();
-            if (!(component == null))
-            {
-                if (GameState.GameType == GameType.TrailRace)
-                {
+            if (!(component == null)) {
+                if (GameState.GameType == GameType.TrailRace) {
                     TrailRaceManager.Instance.CollidedWithCheckpoint(component);
                 }
-                else
-                {
+                else {
                     RacingManager.Instance.CollidedWithCheckpoint(component);
                 }
             }
+
+            if (EnableAutoBackflip && other.CompareTag(BackflipLaunchTag)) {
+                backflipArmed = true;
+                backflipArmTime = Time.time;
+            }
         }
 
-        private void OnDrawGizmos()
-        {
+        private void OnDrawGizmos() {
             Color blue = Color.blue;
             blue.a = 0.3f;
             Gizmos.color = blue;
-            if (DamageWaterline != null)
-            {
+            if (DamageWaterline != null) {
                 Gizmos.DrawCube(DamageWaterline.transform.position, new Vector3(3f, 0f, 3f));
             }
         }
 
-        private void OnDisable()
-        {
-            foreach (_Wheel wheel in wheels)
-            {
+        private void OnDisable() {
+            foreach (_Wheel wheel in wheels) {
                 wheel.wc.BrakeTorque = BrakeTorque;
                 wheel.wc.MotorTorque = 0f;
             }
@@ -961,8 +1378,40 @@ namespace CustomVP
             }
 
             DoCarHandling();
+            
+            if (IsBodyTouchingWithoutWheels()) {
+                StopAutoBackflip();
+                autoBackflipLandingCatchActive = false;
+                backflipArmed = false;
+            }
 
-            // Now intent + COM use current frame Speed/Throttle
+            bool groundedNow = Grounded();
+
+            if (backflipArmed && Time.time - backflipArmTime > BackflipArmMemory) {
+                backflipArmed = false;
+            }
+
+            bool justLaunched = !groundedNow && wasGroundedLastFrame;
+
+            if (EnableAutoBackflip &&
+                justLaunched &&
+                backflipArmed &&
+                Mathf.Abs(Speed) >= BackflipMinLaunchSpeed) {
+                StartAutoBackflip();
+            }
+
+            if (groundedNow && autoBackflipActive) {
+                StopAutoBackflip();
+            }
+
+            wasGroundedLastFrame = groundedNow;
+
+            DoUpsideDownToSideRoll();
+
+            if (!upsideDownRollActive) {
+                DoSideSelfRight();
+            }
+
             UpdateSideWheelieIntent();
             UpdateCenterOfMass();
 
@@ -973,7 +1422,6 @@ namespace CustomVP
             DoAirForces();
             DoAntiroll();
             DoDonutAssist();
-            DoSideSelfRight();
             DoSideWheelieAssist();
 
             acceleration = (m_Rigidbody.velocity - lastVelocity) / Time.fixedDeltaTime;
@@ -981,24 +1429,20 @@ namespace CustomVP
             lastVelocity = m_Rigidbody.velocity;
         }
 
-        private void OnCollisionEnter(Collision collision)
-        {
+        private void OnCollisionEnter(Collision collision) {
             TouchingGround = true;
             GotHit(collision);
         }
 
-        private void OnCollisionStay(Collision collision)
-        {
+        private void OnCollisionStay(Collision collision) {
             TouchingGround = true;
         }
 
-        private void OnCollisionExit(Collision collision)
-        {
+        private void OnCollisionExit(Collision collision) {
             TouchingGround = false;
         }
 
-        private void SendLoadOnTrailerRequest(PhotonTransformView otherTView)
-        {
+        private void SendLoadOnTrailerRequest(PhotonTransformView otherTView) {
             ownerOfTrailerWeWantToLoadOn = otherTView;
             waitingForTrailerResponse = true;
             carUIControl.waitingForLoadOnTrailerResponseWindow.SetActive(value: true);
@@ -1010,30 +1454,24 @@ namespace CustomVP
             myTransformView.SendTraileringRequest(ownerOfTrailerWeWantToLoadOn.photonView);
         }
 
-        public void OnLoadOnTrailerResponseDeclined(PhotonView sender)
-        {
+        public void OnLoadOnTrailerResponseDeclined(PhotonView sender) {
             if (ownerOfTrailerWeWantToLoadOn != null && sender.tView == ownerOfTrailerWeWantToLoadOn &&
-                waitingForTrailerResponse)
-            {
+                waitingForTrailerResponse) {
                 CancelTrailerLoadWaiting();
             }
         }
 
-        public void OnLoadOnTrailerResponseAccepted(PhotonView sender)
-        {
-            if (ownerOfTrailerWeWantToLoadOn != null && sender.tView == ownerOfTrailerWeWantToLoadOn)
-            {
+        public void OnLoadOnTrailerResponseAccepted(PhotonView sender) {
+            if (ownerOfTrailerWeWantToLoadOn != null && sender.tView == ownerOfTrailerWeWantToLoadOn) {
                 LoadOnOtherTrailer(ownerOfTrailerWeWantToLoadOn);
             }
 
-            if (waitingForTrailerResponse)
-            {
+            if (waitingForTrailerResponse) {
                 CancelTrailerLoadWaiting();
             }
         }
 
-        private void CancelTrailerLoadWaiting()
-        {
+        private void CancelTrailerLoadWaiting() {
             ownerOfTrailerWeWantToLoadOn = null;
             waitingForTrailerResponse = false;
             carUIControl.waitingForLoadOnTrailerResponseWindow.SetActive(value: false);
@@ -1043,25 +1481,21 @@ namespace CustomVP
             vehicleIsActive = true;
         }
 
-        public void LoadOnOtherTrailer(PhotonTransformView trailerOwner)
-        {
+        public void LoadOnOtherTrailer(PhotonTransformView trailerOwner) {
             vehicleDataManager.LoadOnTrailer(trailerOwner.trailer, turnToDummy: false);
             myTransformView.TellEveryoneImOnTrailer(trailerOwner.photonView.viewID);
             loadedOnOtherPlayerTrailer = true;
             m_Rigidbody.interpolation = RigidbodyInterpolation.None;
         }
 
-        public void UnloadFromOtherTrailer()
-        {
+        public void UnloadFromOtherTrailer() {
             ConfigurableJoint component = GetComponent<ConfigurableJoint>();
-            if (component != null)
-            {
+            if (component != null) {
                 DestroyImmediate(component);
             }
 
             int pViewID = -1;
-            if (ownerOfTrailer != null)
-            {
+            if (ownerOfTrailer != null) {
                 pViewID = ownerOfTrailer.photonView.viewID;
             }
 
@@ -1071,13 +1505,13 @@ namespace CustomVP
         }
 
         public void Update() {
-            
+
             if (carUIControl != null) // && PhotonNetwork.inRoom)
             {
                 carUIControl.loadOnOtherPlayerTrailerButton.SetActive(value: false);
                 carUIControl.unloadFromOtherPlayerTrailerButton.SetActive(loadedOnOtherPlayerTrailer);
-                
-                if (vehicleDataManager.vehicleType != VehicleType.Bike && !loadedOnOtherPlayerTrailer && 
+
+                if (vehicleDataManager.vehicleType != VehicleType.Bike && !loadedOnOtherPlayerTrailer &&
                     !waitingForTrailerResponse && !WinchManager.Instance.WinchMode &&
                     (myTrailer == null || (myTrailer != null && !myTrailer.connected))) {
                     PhotonView[] currentPlayerViews = MultiplayerManager.CurrentPlayerViews;
@@ -1145,33 +1579,26 @@ namespace CustomVP
             }
         }
 
-        public void OnValidate()
-        {
+        public void OnValidate() {
             SetDiffLock();
             SetupFrictionValues();
             UpdateMotorPower();
-            if (wheels.Count >= 4)
-            {
-                for (int i = 0; i < wheels.Count; i++)
-                {
+            if (wheels.Count >= 4) {
+                for (int i = 0; i < wheels.Count; i++) {
                     wheels[i].power = ((i <= 1) ? FWD : RWD);
-                    if (wheels[i].wc != null && wheels[i].wc.wheelCollider != null)
-                    {
+                    if (wheels[i].wc != null && wheels[i].wc.wheelCollider != null) {
                         wheels[i].wc.wheelCollider.FakeRPM = FakeRPM;
                     }
                 }
             }
 
-            if (wheels.Count != 2)
-            {
+            if (wheels.Count != 2) {
                 return;
             }
 
-            for (int j = 0; j < wheels.Count; j++)
-            {
+            for (int j = 0; j < wheels.Count; j++) {
                 wheels[j].power = (j == 1);
-                if (wheels[j].wc != null && wheels[j].wc.wheelCollider != null)
-                {
+                if (wheels[j].wc != null && wheels[j].wc.wheelCollider != null) {
                     wheels[j].wc.wheelCollider.FakeRPM = FakeRPM;
                 }
             }
@@ -1181,11 +1608,9 @@ namespace CustomVP
             }
         }
 
-        private void PreventFromSideSlide()
-        {
+        private void PreventFromSideSlide() {
             if (!DontPreventFromSliding && Mathf.Abs(m_Rigidbody.velocity.magnitude) < 0.5f && Throttle == 0f &&
-                WheelsOffTheGround == 0 && !TouchingGround)
-            {
+                WheelsOffTheGround == 0 && !TouchingGround) {
                 Vector3 velocity = m_Rigidbody.velocity;
                 float x = velocity.x;
                 Vector3 velocity2 = m_Rigidbody.velocity;
@@ -1194,17 +1619,14 @@ namespace CustomVP
             }
         }
 
-        public void FlipCar()
-        {
-            if (!loadedOnOtherPlayerTrailer)
-            {
+        public void FlipCar() {
+            if (!loadedOnOtherPlayerTrailer) {
                 transform.rotation = Quaternion.LookRotation(transform.forward, Vector3.up);
                 Utility.AlignVehicleByGround(transform);
                 m_Rigidbody.velocity = Vector3.zero;
                 m_Rigidbody.angularVelocity = Vector3.zero;
                 m_Rigidbody.isKinematic = true;
-                if (myTrailer != null && myTrailer.connected)
-                {
+                if (myTrailer != null && myTrailer.connected) {
                     myTrailer.Detach();
                     myTrailer.Attach();
                     myTrailer.rb.isKinematic = true;
@@ -1215,21 +1637,17 @@ namespace CustomVP
             }
         }
 
-        private void RepairVehicle()
-        {
+        private void RepairVehicle() {
             CarHealth = 100f;
         }
 
-        public void RespawnCar()
-        {
-            if (!DontPreventFromSliding && !loadedOnOtherPlayerTrailer)
-            {
+        public void RespawnCar() {
+            if (!DontPreventFromSliding && !loadedOnOtherPlayerTrailer) {
                 Transform availableSpawnPoint = VehicleLoader.Instance.GetAvailableSpawnPoint();
                 transform.position = availableSpawnPoint.position;
                 transform.rotation = availableSpawnPoint.rotation;
                 Utility.AlignVehicleByGround(transform);
-                if (RacingManager.Instance != null && RacingManager.Instance.IsPlayerBusy)
-                {
+                if (RacingManager.Instance != null && RacingManager.Instance.IsPlayerBusy) {
                     RacingManager.Instance.CancelRace();
                 }
 
@@ -1237,8 +1655,7 @@ namespace CustomVP
                 m_Rigidbody.velocity = Vector3.zero;
                 m_Rigidbody.angularVelocity = Vector3.zero;
                 m_Rigidbody.isKinematic = true;
-                if (myTrailer != null)
-                {
+                if (myTrailer != null) {
                     myTrailer.Detach();
                     myTrailer.Attach();
                     myTrailer.rb.isKinematic = true;
@@ -1248,11 +1665,9 @@ namespace CustomVP
             }
         }
 
-        private void UnfreezeCar()
-        {
+        private void UnfreezeCar() {
             m_Rigidbody.isKinematic = false;
-            if (myTrailer != null)
-            {
+            if (myTrailer != null) {
                 myTrailer.rb.isKinematic = false;
             }
         }
@@ -1272,26 +1687,21 @@ namespace CustomVP
             }
         }
 
-        private void SetCOM(Vector3 comPos)
-        {
+        private void SetCOM(Vector3 comPos) {
             m_Rigidbody.centerOfMass = comPos;
         }
 
-        private Vector3 CalculateCOMPosition()
-        {
-            if (BodyColliders == null)
-            {
+        private Vector3 CalculateCOMPosition() {
+            if (BodyColliders == null) {
                 return Vector3.zero;
             }
 
-            if (BodyColliders.Length == 0)
-            {
+            if (BodyColliders.Length == 0) {
                 return Vector3.zero;
             }
 
             Vector3 a = Vector3.zero;
-            for (int i = 0; i < wheels.Count; i++)
-            {
+            for (int i = 0; i < wheels.Count; i++) {
                 a += wheels[i].wc.transform.position;
             }
 
@@ -1311,6 +1721,16 @@ namespace CustomVP
 
             float effectiveFrontLateralAntiroll = FrontLateralAntiroll;
             float effectiveRearLateralAntiroll = RearLateralAntiroll;
+            float effectiveLongitudinalAntiroll = LongitudinalAntiroll;
+
+            if (sideSelfRightActive) {
+                if (sideSelfRightTimer < SideSelfRightPitchPhaseDuration)
+                    return;
+
+                effectiveFrontLateralAntiroll *= SideSelfRightAntirollMultiplier;
+                effectiveRearLateralAntiroll *= SideSelfRightAntirollMultiplier;
+                effectiveLongitudinalAntiroll *= SideSelfRightAntirollMultiplier;
+            }
 
             float frontLeftCompression = wheels[0].wc.IsGrounded ? wheels[0].wc.Compression : 0f;
             float frontRightCompression = wheels[1].wc.IsGrounded ? wheels[1].wc.Compression : 0f;
@@ -1334,7 +1754,7 @@ namespace CustomVP
 
             float frontAvgCompression = (frontLeftCompression + frontRightCompression) * 0.5f;
             float rearAvgCompression = (rearLeftCompression + rearRightCompression) * 0.5f;
-            float longitudinalAntirollForce = (frontAvgCompression - rearAvgCompression) * LongitudinalAntiroll;
+            float longitudinalAntirollForce = (frontAvgCompression - rearAvgCompression) * effectiveLongitudinalAntiroll;
 
             Vector3 frontAxleCenter = (wheels[0].wc.transform.position + wheels[1].wc.transform.position) * 0.5f;
             Vector3 rearAxleCenter = (wheels[2].wc.transform.position + wheels[3].wc.transform.position) * 0.5f;
@@ -1345,13 +1765,10 @@ namespace CustomVP
             m_Rigidbody.AddForceAtPosition(-transform.up * longitudinalAntirollForce * uprightFactor, rearAxleCenter);
         }
 
-        private int NotGroundedWheels()
-        {
+        private int NotGroundedWheels() {
             int num = 0;
-            for (int i = 0; i < wheels.Count; i++)
-            {
-                if (!wheels[i].wc.IsGrounded)
-                {
+            for (int i = 0; i < wheels.Count; i++) {
+                if (!wheels[i].wc.IsGrounded) {
                     num++;
                 }
             }
@@ -1359,12 +1776,9 @@ namespace CustomVP
             return num;
         }
 
-        public bool Grounded()
-        {
-            for (int i = 0; i < wheels.Count; i++)
-            {
-                if (wheels[i].wc.IsGrounded)
-                {
+        public bool Grounded() {
+            for (int i = 0; i < wheels.Count; i++) {
+                if (wheels[i].wc.IsGrounded) {
                     return true;
                 }
             }
@@ -1372,21 +1786,24 @@ namespace CustomVP
             return false;
         }
 
-        private void DoAirForces()
-        {
+        private void DoAirForces() {
             bool flag = !Grounded();
-            if (flag)
-            {
+            if (flag) {
                 FlyingTime += Time.fixedDeltaTime;
             }
-            else
-            {
+            else {
                 StartAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
                 FlyingTime = 0f;
             }
 
-            if (TouchingGround)
-            {
+            if (flag && UpdateAutoBackflip()) {
+                return;
+            }
+            if (flag && UpdateAutoBackflipLandingCatch()) {
+                return;
+            }
+
+            if (TouchingGround) {
                 StartAngularVelocity = Vector3.zero;
             }
 
@@ -1397,8 +1814,7 @@ namespace CustomVP
             Vector3 vector3 = transform.right - b;
             LatTilt = vector3.y;
             Vector3 up = transform.up;
-            if (up.y < 0f)
-            {
+            if (up.y < 0f) {
                 LatTilt = 0f - LatTilt;
             }
 
@@ -1408,8 +1824,7 @@ namespace CustomVP
                 ? StartAngularVelocity.y
                 : (AirControlForce * xInput * num / 10f);
             float num2 = 0f - StartAngularVelocity.z;
-            if (TouchingGround && yInput == 0f)
-            {
+            if (TouchingGround && yInput == 0f) {
                 Vector3 vector4 = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
                 x = vector4.x;
                 Vector3 vector5 = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
@@ -1418,37 +1833,30 @@ namespace CustomVP
 
             Vector3 vector6 = new Vector3(x - AirControlForce * yInput * num / 10f, y, 0f - num2);
             Vector3 target = transform.TransformVector(vector6);
-            if ((SelfAlignForceX > 0f || SelfAlignForceZ > 0f || AirControlForce > 0f) && flag)
-            {
+            if ((SelfAlignForceX > 0f || SelfAlignForceZ > 0f || AirControlForce > 0f) && flag) {
                 m_Rigidbody.angularVelocity = Vector3.MoveTowards(m_Rigidbody.angularVelocity, target,
                     Time.fixedDeltaTime * AlignSpeed);
             }
 
             bool flag2 = false;
-            if (Driver != null)
-            {
+            if (Driver != null) {
                 flag2 = Driver.KnockedOut;
             }
 
-            if (flag && !flag2)
-            {
+            if (flag && !flag2) {
                 Vector3 up2 = transform.up;
-                if (up2.y < 0f && !Passed90Degrees)
-                {
+                if (up2.y < 0f && !Passed90Degrees) {
                     Passed90Degrees = true;
                 }
 
                 BackFlip = (vector6.x < 0f);
-                if (Vector3.Angle(Vector3.up, -transform.up) < 5f)
-                {
+                if (Vector3.Angle(Vector3.up, -transform.up) < 5f) {
                     PassedVerticalState = true;
                 }
 
-                if (Passed90Degrees && PassedVerticalState)
-                {
+                if (Passed90Degrees && PassedVerticalState) {
                     Vector3 up3 = transform.up;
-                    if (up3.y > 0f)
-                    {
+                    if (up3.y > 0f) {
                         Passed90Degrees = false;
                         PassedVerticalState = false;
                         carUIControl.ShowNotification((!BackFlip) ? "Frontflip!" : "Backflip!", blinking: false);
@@ -1458,44 +1866,36 @@ namespace CustomVP
                     }
                 }
 
-                if (Passed90Degrees || PassedVerticalState)
-                {
+                if (Passed90Degrees || PassedVerticalState) {
                     AngleCounter = 0f;
                 }
             }
-            else
-            {
+            else {
                 Passed90Degrees = false;
                 PassedVerticalState = false;
                 BackFlip = false;
             }
 
-            if (flag && !flag2)
-            {
-                if (prevForward == Vector3.zero)
-                {
+            if (flag && !flag2) {
+                if (prevForward == Vector3.zero) {
                     prevForward = vector;
                 }
 
                 AngleCounter += Vector3.Angle(vector, prevForward) * Mathf.Sign(vector6.y);
                 prevForward = vector;
-                if (AngleCounter > 320f || AngleCounter < -320f)
-                {
+                if (AngleCounter > 320f || AngleCounter < -320f) {
                     AngleCounter = 0f;
                     carUIControl.ShowNotification("Roll over!", blinking: false);
                 }
             }
-            else
-            {
+            else {
                 AngleCounter = 0f;
                 prevForward = Vector3.zero;
             }
         }
 
-        private void UpdateFriction()
-        {
-            for (int i = 0; i < wheels.Count; i++)
-            {
+        private void UpdateFriction() {
+            for (int i = 0; i < wheels.Count; i++) {
                 float num = (100f + PowerParts
                     .GetPart(GetComponent<VehicleDataManager>().vehicleType, PowerPartType.Grip, GripStage)
                     .IncrementPercantage) / 100f;
@@ -1505,46 +1905,37 @@ namespace CustomVP
             }
         }
 
-        public void SetZeroFriction()
-        {
-            foreach (_Wheel wheel in wheels)
-            {
+        public void SetZeroFriction() {
+            foreach (_Wheel wheel in wheels) {
                 wheel.wc.forwardFrictionCoefficient =
                     (wheel.wc.sideFrictionCoefficient = (wheel.wc.surfaceFrictionCoefficient = 0f));
                 wheel.wc.UpdateFriction();
             }
         }
 
-        public void SetDefaultFriction()
-        {
-            foreach (_Wheel wheel in wheels)
-            {
+        public void SetDefaultFriction() {
+            foreach (_Wheel wheel in wheels) {
                 wheel.wc.forwardFrictionCoefficient =
                     (wheel.wc.sideFrictionCoefficient = (wheel.wc.surfaceFrictionCoefficient = 1f));
                 wheel.wc.UpdateFriction();
             }
         }
 
-        public void UpdateEngineModel()
-        {
+        public void UpdateEngineModel() {
             EngineType engineType = EngineType.Stock;
-            if (BlowerStage > 0)
-            {
+            if (BlowerStage > 0) {
                 engineType = EngineType.Blower;
             }
 
-            if (TurboStage > 0 || DieselStage == 4)
-            {
+            if (TurboStage > 0 || DieselStage == 4) {
                 engineType = EngineType.Turbo;
             }
 
             GetComponent<BodyPartsSwitcher>().UpdateEngineModel(engineType);
         }
 
-        public float GetMaxTorque()
-        {
-            if (vehicleDataManager == null)
-            {
+        public float GetMaxTorque() {
+            if (vehicleDataManager == null) {
                 return 0f;
             }
 
@@ -1556,28 +1947,23 @@ namespace CustomVP
             PowerPart part4 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Turbo, TurboStage);
             PowerPart part5 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Blower, BlowerStage);
             float num = 0f;
-            if (part != null)
-            {
+            if (part != null) {
                 num += part.IncrementPercantage;
             }
 
-            if (part2 != null)
-            {
+            if (part2 != null) {
                 num += part2.IncrementPercantage;
             }
 
-            if (part3 != null)
-            {
+            if (part3 != null) {
                 num += part3.IncrementPercantage;
             }
 
-            if (part4 != null)
-            {
+            if (part4 != null) {
                 num += part4.IncrementPercantage;
             }
 
-            if (part5 != null)
-            {
+            if (part5 != null) {
                 num += part5.IncrementPercantage;
             }
 
@@ -1588,18 +1974,15 @@ namespace CustomVP
             float num3 = Mathf.Lerp(5f, -15f, Mathf.Abs(f2) / 10f);
             num += num3;
             float num4 = ModsAdditionalBoost;
-            if (num < 0f)
-            {
+            if (num < 0f) {
                 num4 = 1f;
             }
 
             return BaseTorque / 100f * (100f + num * num4);
         }
 
-        private void UpdateMotorPower()
-        {
-            if (!(vehicleDataManager == null))
-            {
+        private void UpdateMotorPower() {
+            if (!(vehicleDataManager == null)) {
                 PowerPart part = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.EngineBlock,
                     EngineBlockStage);
                 PowerPart part2 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Head, HeadStage);
@@ -1611,33 +1994,27 @@ namespace CustomVP
                 PowerPart part6 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Turbo, TurboStage);
                 PowerPart part7 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Blower, BlowerStage);
                 FinalTorquePercentage = 0f;
-                if (part != null)
-                {
+                if (part != null) {
                     FinalTorquePercentage += part.IncrementPercantage;
                 }
 
-                if (part2 != null)
-                {
+                if (part2 != null) {
                     FinalTorquePercentage += part2.IncrementPercantage;
                 }
 
-                if (part3 != null)
-                {
+                if (part3 != null) {
                     FinalTorquePercentage += part3.IncrementPercantage;
                 }
 
-                if (part4 != null)
-                {
+                if (part4 != null) {
                     FinalTorquePercentage += part4.IncrementPercantage;
                 }
 
-                if (part6 != null)
-                {
+                if (part6 != null) {
                     FinalTorquePercentage += part6.IncrementPercantage;
                 }
 
-                if (part7 != null)
-                {
+                if (part7 != null) {
                     FinalTorquePercentage += part7.IncrementPercantage;
                 }
 
@@ -1650,8 +2027,7 @@ namespace CustomVP
                 float num3 = Mathf.Lerp(0.5f, 1f, CarHealth / 100f);
                 float num4 = ModsAdditionalBoost;
                 float num5 = ModsMaxSpeedBoost;
-                if (FinalTorquePercentage < 0f)
-                {
+                if (FinalTorquePercentage < 0f) {
                     num4 = 1f;
                     num5 = 1f;
                 }
@@ -1664,10 +2040,8 @@ namespace CustomVP
             }
         }
 
-        private void SetupCounterWheels()
-        {
-            if (wheels.Count >= 4)
-            {
+        private void SetupCounterWheels() {
+            if (wheels.Count >= 4) {
                 wheels[0].wc.wheelCollider.OppositeWheel = wheels[1].wc.wheelCollider;
                 wheels[1].wc.wheelCollider.OppositeWheel = wheels[0].wc.wheelCollider;
                 wheels[2].wc.wheelCollider.OppositeWheel = wheels[3].wc.wheelCollider;
@@ -1680,20 +2054,16 @@ namespace CustomVP
                     (wheels[3].wc.wheelCollider.AnotherAxleWheelL = wheels[0].wc.wheelCollider);
                 wheels[2].wc.wheelCollider.AnotherAxleWheelR =
                     (wheels[3].wc.wheelCollider.AnotherAxleWheelR = wheels[1].wc.wheelCollider);
-                if (wheels.Count > 4)
-                {
+                if (wheels.Count > 4) {
                     wheels[4].wc.wheelCollider.OppositeWheel = wheels[5].wc.wheelCollider;
                     wheels[5].wc.wheelCollider.OppositeWheel = wheels[4].wc.wheelCollider;
                 }
             }
         }
 
-        private void SetupFrictionValues()
-        {
-            for (int i = 0; i < wheels.Count; i++)
-            {
-                if (wheels[i].wc != null)
-                {
+        private void SetupFrictionValues() {
+            for (int i = 0; i < wheels.Count; i++) {
+                if (wheels[i].wc != null) {
                     wheels[i].wc.f_extSlip = ((i <= 1) ? FrontFriction.f_ExtremumSlip : RearFriction.f_ExtremumSlip);
                     wheels[i].wc.f_extVal = ((i <= 1) ? FrontFriction.f_ExtremumValue : RearFriction.f_ExtremumValue);
                     wheels[i].wc.f_asSlip = ((i <= 1) ? FrontFriction.f_AsymptoteSlip : RearFriction.f_AsymptoteSlip);
@@ -1709,10 +2079,8 @@ namespace CustomVP
             }
         }
 
-        private void GetDataFromSurfaceManager()
-        {
-            if (carUIControl != null)
-            {
+        private void GetDataFromSurfaceManager() {
+            if (carUIControl != null) {
                 CarUIControl obj = carUIControl;
                 Vector3 up = transform.up;
                 obj.SwitchFlipButton(up.y < 0f && Mathf.Abs(Speed) < 2f);
@@ -1721,25 +2089,20 @@ namespace CustomVP
             nextSurfaceManagerDataUpdateTime = Time.time + SurfaceManagerDataUpdateInterval;
             UpdateMotorPower();
             CheckOverheating();
-            if (surfaceManager != null)
-            {
+            if (surfaceManager != null) {
                 CheckWaterDamage();
                 UpdateFriction();
             }
         }
 
-        private void SetDiffLock()
-        {
-            foreach (_Wheel wheel in wheels)
-            {
-                if (wheel.wc.wheelCollider == null)
-                {
+        private void SetDiffLock() {
+            foreach (_Wheel wheel in wheels) {
+                if (wheel.wc.wheelCollider == null) {
                     return;
                 }
             }
 
-            for (int i = 0; i < wheels.Count; i++)
-            {
+            for (int i = 0; i < wheels.Count; i++) {
                 wheels[i].wc.wheelCollider.DiffLock = ((i <= 1) ? FrontDiffLock : RearDiffLock);
                 wheels[i].wc.wheelCollider.InteraxleDifLock = InteraxleDiffLock;
                 wheels[i].wc.wheelCollider.DiffLockRatio = ((i <= 1) ? FrontDiffLockRatio : RearDiffLockRatio);
@@ -1747,42 +2110,34 @@ namespace CustomVP
             }
         }
 
-        private void SetDiffLock(int TypeID)
-        {
+        private void SetDiffLock(int TypeID) {
             RearDiffLock = (FrontDiffLock = (InteraxleDiffLock = false));
-            if (TypeID > 0)
-            {
+            if (TypeID > 0) {
                 RearDiffLock = true;
             }
 
-            if (TypeID > 1)
-            {
+            if (TypeID > 1) {
                 FrontDiffLock = true;
             }
 
-            if (TypeID > 2)
-            {
+            if (TypeID > 2) {
                 InteraxleDiffLock = true;
             }
 
             OnValidate();
         }
 
-        private void SetDrive(int TypeID)
-        {
+        private void SetDrive(int TypeID) {
             FWD = (RWD = false);
-            if (TypeID == 0)
-            {
+            if (TypeID == 0) {
                 RWD = true;
             }
 
-            if (TypeID == 1)
-            {
+            if (TypeID == 1) {
                 FWD = true;
             }
 
-            if (TypeID == 2)
-            {
+            if (TypeID == 2) {
                 FWD = true;
                 RWD = true;
             }
@@ -1790,20 +2145,20 @@ namespace CustomVP
             OnValidate();
         }
 
-        public void SteerTowards(Vector3 pos)
-        {
+        public void SteerTowards(Vector3 pos) {
             Vector3 vector = transform.InverseTransformDirection(pos - transform.position);
             float num = (0f - Mathf.Atan2(0f - vector.x, vector.z)) * 57.29578f;
             xInput = Mathf.Clamp(num / maxSteeringAngle, -1f, 1f);
         }
 
-        private void DoInput()
-        {
+        private void DoInput() {
             xInput = Input.GetAxis("Horizontal") + CrossPlatformInputManager.GetAxis("Horizontal");
             yInput = Input.GetAxis("Vertical") + CrossPlatformInputManager.GetAxis("Vertical");
 
+#if UNITY_EDITOR
             Debug.Log("xInput " + xInput);
             Debug.Log("yInput " + yInput);
+#endif
 
             // if (!Application.isEditor)
             //     if (Input.touchCount == 0)
@@ -1811,76 +2166,62 @@ namespace CustomVP
             //         yInput = 0f;
             //     }
 
-            if (CrossPlatformInputManager.GetButtonDown("SetDiffLock0"))
-            {
+            if (CrossPlatformInputManager.GetButtonDown("SetDiffLock0")) {
                 SetDiffLock(0);
             }
 
-            if (CrossPlatformInputManager.GetButtonDown("SetDiffLock1"))
-            {
+            if (CrossPlatformInputManager.GetButtonDown("SetDiffLock1")) {
                 SetDiffLock(1);
             }
 
-            if (CrossPlatformInputManager.GetButtonDown("SetDiffLock2"))
-            {
+            if (CrossPlatformInputManager.GetButtonDown("SetDiffLock2")) {
                 SetDiffLock(2);
             }
 
-            if (CrossPlatformInputManager.GetButtonDown("SetDiffLock3"))
-            {
+            if (CrossPlatformInputManager.GetButtonDown("SetDiffLock3")) {
                 SetDiffLock(3);
             }
 
-            if (CrossPlatformInputManager.GetButtonDown("SetLowGear"))
-            {
+            if (CrossPlatformInputManager.GetButtonDown("SetLowGear")) {
                 LowGear = true;
             }
 
-            if (CrossPlatformInputManager.GetButtonDown("SetHighGear"))
-            {
+            if (CrossPlatformInputManager.GetButtonDown("SetHighGear")) {
                 LowGear = false;
             }
 
-            if (CrossPlatformInputManager.GetButtonDown("SetDrive0"))
-            {
+            if (CrossPlatformInputManager.GetButtonDown("SetDrive0")) {
                 SetDrive(0);
             }
 
-            if (CrossPlatformInputManager.GetButtonDown("SetDrive1"))
-            {
+            if (CrossPlatformInputManager.GetButtonDown("SetDrive1")) {
                 SetDrive(1);
             }
 
-            if (CrossPlatformInputManager.GetButtonDown("SetDrive2"))
-            {
+            if (CrossPlatformInputManager.GetButtonDown("SetDrive2")) {
                 SetDrive(2);
             }
 
-            if (CrossPlatformInputManager.GetButtonDown("Repair"))
-            {
+            if (CrossPlatformInputManager.GetButtonDown("Repair")) {
                 RepairVehicle();
             }
         }
 
-        private void DoCarHandling()
-        {
+        private void DoCarHandling() {
             Handbraking = (CrossPlatformInputManager.GetButton("Ebrake") ? 1 : 0);
             float target = 0f;
-            if (Speed > 1f || transmissionType == TransmissionType.Manual)
-            {
+            if (Speed > 1f || transmissionType == TransmissionType.Manual) {
                 target = 0f - Mathf.Clamp(yInput, -1f, 0f);
             }
 
             Braking = Mathf.MoveTowards(Braking, target, Time.fixedDeltaTime * 50f);
             Braking = Mathf.Max(Braking, ExtremeBraking);
             float num = yInput;
-            if ((Speed > 1f && Grounded()) || transmissionType == TransmissionType.Manual)
-            {
+            if ((Speed > 1f && Grounded()) || transmissionType == TransmissionType.Manual) {
                 num = Mathf.Clamp(yInput, 0f, 1f);
             }
 
-            if (transmissionType == TransmissionType.Manual && engine.ReverseGear)
-            {
+            if (transmissionType == TransmissionType.Manual && engine.ReverseGear) {
                 num = 0f - num;
             }
 
@@ -1895,13 +2236,11 @@ namespace CustomVP
             float num4 = Mathf.Clamp01(1f - Speed / leveledMaxSpeed);
             float num5 = (FWD && RWD) ? 1 : 2;
             CurrentTorque = LeveledMaxTorque * DynoCurve.Evaluate(rPM / maxRpm) * num2 * topGear * num3 * num4 * num5;
-            if (float.IsNaN(CurrentTorque))
-            {
+            if (float.IsNaN(CurrentTorque)) {
                 CurrentTorque = 0f;
             }
 
-            if (Throttle == 0f)
-            {
+            if (Throttle == 0f) {
                 CurrentTorque = 0f;
             }
 
@@ -1912,84 +2251,68 @@ namespace CustomVP
             float rearSteerT = Mathf.Clamp01(Mathf.Abs(Speed) / RearSteerFadeOutSpeed);
             InverseSteerMultiplier = EnableRearSteer ? Mathf.Lerp(RearSteerLowSpeedMultiplier, RearSteerHighSpeedMultiplier, rearSteerT) : 0f;
 
-            if (SteeringWheel != null)
-            {
+            if (SteeringWheel != null) {
                 SteeringWheel.localEulerAngles = new Vector3(0f, 0f,
                     Mathf.LerpUnclamped(SteeringWheelMaxAngle, 0f, Steering / maxSteeringAngle + 1f));
             }
 
-            if (engine != null && engine.NeutralGear)
-            {
+            if (engine != null && engine.NeutralGear) {
                 CurrentTorque = 0f;
             }
 
             currentBrakeTorque = BrakeTorque * Braking;
-            foreach (_Wheel wheel in wheels)
-            {
-                if (wheel.wc.wheelCollider == null)
-                {
+            foreach (_Wheel wheel in wheels) {
+                if (wheel.wc.wheelCollider == null) {
                     break;
                 }
 
-                if (wheel.wc.wheelCollider.OppositeWheel == null)
-                {
+                if (wheel.wc.wheelCollider.OppositeWheel == null) {
                     SetupCounterWheels();
                 }
 
                 wheel.wc.MotorTorque = ((!wheel.power) ? 0f : (CurrentTorque * Throttle));
-                if (wheel.steer)
-                {
+                if (wheel.steer) {
                     wheel.wc.Steer = Steering;
                 }
 
-                if (wheel.inverseSteer)
-                {
+                if (wheel.inverseSteer) {
                     wheel.wc.Steer = (0f - Steering) * InverseSteerMultiplier;
                 }
 
                 wheel.wc.BrakeTorque = currentBrakeTorque;
-                if (wheel.handbrake)
-                {
+                if (wheel.handbrake) {
                     wheel.wc.BrakeTorque = BrakeTorque * Mathf.Max(Handbraking * 3f, Braking);
                 }
 
-                if (CurrentTorque * Throttle == 0f && Braking == 0f && Handbraking == 0f && ExtremeBraking == 0f)
-                {
+                if (CurrentTorque * Throttle == 0f && Braking == 0f && Handbraking == 0f && ExtremeBraking == 0f) {
                     wheel.wc.BrakeTorque = BrakeTorque / 2f * RollingResistance;
                 }
             }
         }
 
-        private void GotHit(Collision col)
-        {
+        private void GotHit(Collision col) {
             bool flag = false;
             ContactPoint[] contacts = col.contacts;
-            for (int i = 0; i < contacts.Length; i++)
-            {
+            for (int i = 0; i < contacts.Length; i++) {
                 ContactPoint contactPoint = contacts[i];
                 Collider[] bodyColliders = BodyColliders;
-                foreach (Collider obj in bodyColliders)
-                {
-                    if (contactPoint.thisCollider.Equals(obj))
-                    {
+                foreach (Collider obj in bodyColliders) {
+                    if (contactPoint.thisCollider.Equals(obj)) {
                         flag = true;
                         break;
                     }
                 }
             }
 
-            if (Vector3.Angle(transform.up, col.impulse) < 20f)
-            {
+            if (Vector3.Angle(transform.up, col.impulse) < 20f) {
                 flag = false;
             }
 
-            if (flag && !(col.impulse.magnitude < 100f) && !(col.gameObject.GetPhotonView() != null))
-            {
+            if (flag && !(col.impulse.magnitude < 100f) && !(col.gameObject.GetPhotonView() != null)) {
                 float num = Mathf.InverseLerp(0f, MaximumHitDamageForce, col.impulse.magnitude);
                 float num2 = MaximumHitDamage * num;
                 num2 *= 1f - DurabilityStage * 0.01f;
-                if (GameState.GameMode == GameMode.Multiplayer || GameState.SceneName == "StuntPark")
-                {
+                if (GameState.GameMode == GameMode.Multiplayer || GameState.SceneName == "StuntPark") {
                     num2 *= 0.5f;
                 }
 
@@ -1997,31 +2320,25 @@ namespace CustomVP
             }
         }
 
-        private void CheckWaterDamage()
-        {
-            if (surfaceManager.IsCarInWater() && !HasSnorkel)
-            {
+        private void CheckWaterDamage() {
+            if (surfaceManager.IsCarInWater() && !HasSnorkel) {
                 Vector3 position = surfaceManager.WaterMeshes[surfaceManager.WhatWaterMeshIsCarOn()].transform.position;
                 Vector3 position2 = DamageWaterline.position;
-                if (position2.y < position.y)
-                {
+                if (position2.y < position.y) {
                     DoWaterDamage(WaterDamage);
                 }
             }
         }
 
-        private void DoWaterDamage(float Value)
-        {
+        private void DoWaterDamage(float Value) {
             CarHealth = Mathf.Clamp(CarHealth - Value, 0f, 100f);
             carUIControl.ShowNotification("Water damage!", blinking: false);
             CameraController.Instance.Shake();
         }
 
-        private void CheckOverheating()
-        {
+        private void CheckOverheating() {
             float num = 0f;
-            if (Mathf.Abs(Speed) > 1f)
-            {
+            if (Mathf.Abs(Speed) > 1f) {
                 num += ((!FWD || !RWD) ? 0f : FullWDTemperatureStep);
                 num += ((!FrontDiffLock && !RearDiffLock) ? 0f : DiffLockTemperatureStep);
                 num += ((!LowGear) ? 0f : LowGearTemperatureStep);
@@ -2029,27 +2346,23 @@ namespace CustomVP
 
             num -= CoolingStep + CoolingStep * (1f - DurabilityStage * 0.01f);
             DrivetrainTemperature = Mathf.Clamp(DrivetrainTemperature + num, 0f, MaxTemperature);
-            if (DrivetrainTemperature > DamageTemperature)
-            {
+            if (DrivetrainTemperature > DamageTemperature) {
                 DoOverheatDamage(OverheatDamage);
             }
 
             float temperatureRatio = Mathf.InverseLerp(0f, DamageTemperature, DrivetrainTemperature);
-            if (carUIControl != null)
-            {
+            if (carUIControl != null) {
                 carUIControl.UpdateThermometer(temperatureRatio);
             }
         }
 
-        private void DoOverheatDamage(float Value)
-        {
+        private void DoOverheatDamage(float Value) {
             CarHealth = Mathf.Clamp(CarHealth - Value, 0f, 100f);
             carUIControl.ShowNotification("Overheating!", blinking: false);
             CameraController.Instance.Shake();
         }
 
-        private CarControllerData GetCarControllerData()
-        {
+        private CarControllerData GetCarControllerData() {
             CarControllerData carControllerData = new CarControllerData();
             carControllerData.CarHealth = CarHealth;
             carControllerData.EngineBlockStage = EngineBlockStage;
@@ -2080,8 +2393,7 @@ namespace CustomVP
             return carControllerData;
         }
 
-        public void SetCarControllerData(CarControllerData cData)
-        {
+        public void SetCarControllerData(CarControllerData cData) {
             CarHealth = cData.CarHealth;
             EngineBlockStage = cData.EngineBlockStage;
             GripStage = cData.GripStage;
@@ -2105,19 +2417,16 @@ namespace CustomVP
             TimingRatio = cData.TimingRatio;
             PerfectFuelRatio = cData.PerfectFuelRatio;
             PerfectTimingRatio = cData.PerfectTimingRatio;
-            if (cData.GearRatios != null && cData.GearRatios.Length == 5)
-            {
+            if (cData.GearRatios != null && cData.GearRatios.Length == 5) {
                 GearRatios = cData.GearRatios;
                 LowGearRatio = cData.LowGearRatio;
             }
 
-            if (PerfectFuelRatio == 0f)
-            {
+            if (PerfectFuelRatio == 0f) {
                 PerfectFuelRatio = Random.Range(-10f, 10f);
             }
 
-            if (PerfectTimingRatio == 0f)
-            {
+            if (PerfectTimingRatio == 0f) {
                 PerfectTimingRatio = Random.Range(-10f, 10f);
             }
 
@@ -2128,14 +2437,12 @@ namespace CustomVP
             UpdateEngineModel();
         }
 
-        public string ExportData()
-        {
+        public string ExportData() {
             CarControllerData carControllerData = GetCarControllerData();
             return XmlSerialization.SerializeData<CarControllerData>(carControllerData);
         }
 
-        public void ImportData(string XMLString)
-        {
+        public void ImportData(string XMLString) {
             CarControllerData carControllerData =
                 (CarControllerData)XmlSerialization.DeserializeData<CarControllerData>(XMLString);
             SetCarControllerData(carControllerData);
