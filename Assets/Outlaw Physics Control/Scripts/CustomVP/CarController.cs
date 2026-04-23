@@ -54,7 +54,7 @@ namespace CustomVP {
 
             upsideDownRollActive = true;
 
-            EnableRearSteer = false;
+            //EnableRearSteer = false;
             EnableSideWheelieAssist = false;
             EnableSideWheelieCOMShift = false;
 
