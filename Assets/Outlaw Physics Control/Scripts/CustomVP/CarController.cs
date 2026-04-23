@@ -6,6 +6,90 @@ namespace CustomVP {
     public class CarController : MonoBehaviour {
         public bool vehicleIsActive;
 
+        #region Upside Down To Side Roll
+        [Header("Upside Down To Side Roll")]
+        public bool EnableUpsideDownToSideRoll = true;
+        public float UpsideDownRollMaxSpeed = 8f;
+        public float UpsideDownRollMinThrottle = 0.25f;
+        public float UpsideDownDetectUpDot = -0.75f;     // roof-down detection
+        public float UpsideDownReleaseUpDot = -0.25f;    // stop helper once it has rolled enough
+        public float UpsideDownRollForce = 8f;
+        public float UpsideDownRollDamping = 2.5f;
+        public float UpsideDownRollMaxAssist = 10f;
+        public float UpsideDownPitchDamping = 1.2f;
+        public float UpsideDownYawDamping = 1.0f;
+        public float UpsideDownPreferredDirection = 1f;  // 1 or -1
+
+        private bool upsideDownRollActive = false;
+        private float upsideDownRollDirection = 1f;
+
+        private bool IsUpsideDownOnRoof() {
+            if (!EnableUpsideDownToSideRoll)
+                return false;
+
+            // body touching ground, but wheels not touching ground
+            if (!TouchingGround)
+                return false;
+
+            if (Grounded())
+                return false;
+
+            if (transform.up.y > UpsideDownDetectUpDot)
+                return false;
+
+            if (Mathf.Abs(Speed) > UpsideDownRollMaxSpeed)
+                return false;
+
+            if (Throttle < UpsideDownRollMinThrottle)
+                return false;
+
+            return true;
+        }
+
+        private void DoUpsideDownToSideRoll() {
+            upsideDownRollActive = false;
+
+            if (!IsUpsideDownOnRoof())
+                return;
+
+            upsideDownRollActive = true;
+
+            EnableRearSteer = false;
+            EnableSideWheelieAssist = false;
+            EnableSideWheelieCOMShift = false;
+
+            sideWheelieCOMState = 0;
+            sideWheelieReleaseTimer = 0f;
+            sideWheelieIntentTimer = 0f;
+            sideWheelieIntentDirection = 0;
+            donutIntentTimer = 0f;
+
+            // choose a stable roll direction
+            if (Mathf.Abs(LatTilt) > 0.05f) {
+                upsideDownRollDirection = Mathf.Sign(LatTilt);
+            }
+            else if (Mathf.Abs(xInput) > 0.2f) {
+                upsideDownRollDirection = Mathf.Sign(xInput);
+            }
+            else if (Mathf.Abs(upsideDownRollDirection) < 0.5f) {
+                upsideDownRollDirection = Mathf.Sign(UpsideDownPreferredDirection);
+            }
+
+            Vector3 localAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
+            float pitchRate = localAngularVelocity.x;
+            float yawRate = localAngularVelocity.y;
+            float rollRate = localAngularVelocity.z;
+
+            float rollAssist = upsideDownRollDirection * UpsideDownRollForce - rollRate * UpsideDownRollDamping;
+            rollAssist = Mathf.Clamp(rollAssist, -UpsideDownRollMaxAssist, UpsideDownRollMaxAssist);
+
+            float pitchAssist = -pitchRate * UpsideDownPitchDamping;
+            float yawAssist = -yawRate * UpsideDownYawDamping;
+
+            m_Rigidbody.AddRelativeTorque(pitchAssist, yawAssist, rollAssist, ForceMode.Acceleration);
+        }
+        #endregion
+
         #region Side Self Right
         [Header("Side Self Right")]
         public bool sideSelfRightStuntActive = true;
@@ -89,6 +173,9 @@ namespace CustomVP {
         }
         private void DoSideSelfRight() {
             sideSelfRightActive = false;
+            
+            if (upsideDownRollActive)
+                return;
 
             if (!sideSelfRightLatched) {
                 if (!CanStartSideSelfRight()) {
@@ -1009,7 +1096,11 @@ namespace CustomVP {
             }
 
             DoCarHandling();
-            DoSideSelfRight();
+            DoUpsideDownToSideRoll();
+
+            if (!upsideDownRollActive) {
+                DoSideSelfRight();
+            }
 
             UpdateSideWheelieIntent();
             UpdateCenterOfMass();
@@ -1747,8 +1838,10 @@ namespace CustomVP {
             xInput = Input.GetAxis("Horizontal") + CrossPlatformInputManager.GetAxis("Horizontal");
             yInput = Input.GetAxis("Vertical") + CrossPlatformInputManager.GetAxis("Vertical");
 
+#if UNITY_EDITOR
             Debug.Log("xInput " + xInput);
             Debug.Log("yInput " + yInput);
+#endif
 
             // if (!Application.isEditor)
             //     if (Input.touchCount == 0)
