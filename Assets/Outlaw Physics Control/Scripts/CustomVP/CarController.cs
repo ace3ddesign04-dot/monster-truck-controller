@@ -6,6 +6,283 @@ namespace CustomVP {
     public class CarController : MonoBehaviour {
         public bool vehicleIsActive;
 
+        #region Auto Backflip
+        [Header("Auto Backflip")]
+        public bool EnableAutoBackflip = true;
+        public string BackflipLaunchTag = "BackflipLaunch";
+        public float BackflipArmMemory = 0.35f;
+        public float BackflipMinLaunchSpeed = 8f;
+
+        public float BackflipTargetAngle = 360f;
+
+        public float BackflipPitchRateGain = 12f;
+        public float BackflipPitchDamping = 3f;
+        public float BackflipMaxPitchAssist = 35f;
+
+        public float BackflipYawGain = 6f;
+        public float BackflipYawDamping = 3f;
+
+        public float BackflipRollGain = 10f;
+        public float BackflipRollDamping = 4f;
+        public float BackflipMaxLateralAssist = 18f;
+
+        public float BackflipPredictionMaxTime = 2.5f;
+        public float BackflipPredictionStep = 0.05f;
+        public float BackflipGroundProbeRadius = 0.8f;
+        public float BackflipGroundProbeHeight = 1.0f;
+        public LayerMask BackflipLandingMask = ~0;
+
+        public float BackflipExtraHangForce = 0.8f;
+        public float BackflipExtraHangDuration = 0.18f;
+
+        public float BackflipCruisePitchRateDeg = 240f;
+        public float BackflipCorrectionStartAngle = 300f;
+        public float BackflipYawRollCorrectionStartAngle = 320f;
+
+        public float BackflipMinSolvePitchRateDeg = 140f;
+        public float BackflipMaxSolvePitchRateDeg = 280f;
+
+        public bool EnableSpeedBasedDoubleBackflip = true;
+        public float DoubleBackflipSpeedThreshold = 42f;
+
+        public float SingleBackflipTargetAngle = 360f;
+        public float DoubleBackflipTargetAngle = 720f;
+
+        public float BackflipLandingCatchStartAngle = 40f;   // start catch when this much angle remains
+        public float BackflipLandingCatchPitchDamping = 10f;
+
+        public float BackflipLandingCatchYawGain = 8f;
+        public float BackflipLandingCatchYawDamping = 4f;
+
+        public float BackflipLandingCatchRollGain = 16f;
+        public float BackflipLandingCatchRollDamping = 6f;
+        public float BackflipLandingCatchMaxAssist = 18f;
+
+        private float currentBackflipTargetAngle = 360f;
+        private bool autoBackflipLandingCatchActive = false;
+
+        private bool backflipArmed = false;
+        private float backflipArmTime = -999f;
+        private bool autoBackflipActive = false;
+        private bool wasGroundedLastFrame = false;
+
+        private Vector3 backflipLaunchForwardFlat;
+        private float backflipAccumulatedAngle = 0f;
+        private float backflipHangTimer = 0f;
+
+        private bool IsBodyTouchingWithoutWheels() {
+            return TouchingGround && !Grounded();
+        }
+        private void StartAutoBackflip() {
+            autoBackflipActive = true;
+            autoBackflipLandingCatchActive = false;
+            backflipArmed = false;
+            backflipAccumulatedAngle = 0f;
+            backflipHangTimer = 0f;
+
+            currentBackflipTargetAngle =
+                (EnableSpeedBasedDoubleBackflip && Mathf.Abs(Speed) >= DoubleBackflipSpeedThreshold)
+                ? DoubleBackflipTargetAngle
+                : SingleBackflipTargetAngle;
+
+            backflipLaunchForwardFlat = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (backflipLaunchForwardFlat.sqrMagnitude < 0.0001f)
+                backflipLaunchForwardFlat = transform.forward;
+            backflipLaunchForwardFlat.Normalize();
+        }
+
+        private void StopAutoBackflip() {
+            autoBackflipActive = false;
+            autoBackflipLandingCatchActive = false;
+            backflipAccumulatedAngle = 0f;
+            backflipHangTimer = 0f;
+        }
+
+        private float PredictBackflipTimeToGround() {
+            Vector3 start = m_Rigidbody.worldCenterOfMass + Vector3.up * BackflipGroundProbeHeight;
+            Vector3 velocity = m_Rigidbody.velocity;
+
+            for (float t = BackflipPredictionStep; t <= BackflipPredictionMaxTime; t += BackflipPredictionStep) {
+                Vector3 futurePos = start + velocity * t + 0.5f * Physics.gravity * t * t;
+
+                RaycastHit hit;
+                if (Physics.SphereCast(
+                        futurePos,
+                        BackflipGroundProbeRadius,
+                        Vector3.down,
+                        out hit,
+                        BackflipGroundProbeHeight * 2f,
+                        BackflipLandingMask,
+                        QueryTriggerInteraction.Ignore)) {
+                    return t;
+                }
+            }
+
+            return -1f;
+        }
+
+        private bool UpdateAutoBackflip() {
+            if (!autoBackflipActive)
+                return false;
+
+            if (IsBodyTouchingWithoutWheels()) {
+                StopAutoBackflip();
+                autoBackflipLandingCatchActive = false;
+                return false;
+            }
+
+            if (Grounded()) {
+                StopAutoBackflip();
+                return false;
+            }
+
+            Vector3 localAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
+
+            // negative local X = backflip in your setup
+            float currentBackflipRateDeg = Mathf.Max(0f, -localAngularVelocity.x * Mathf.Rad2Deg);
+            backflipAccumulatedAngle += currentBackflipRateDeg * Time.fixedDeltaTime;
+            backflipAccumulatedAngle = Mathf.Min(backflipAccumulatedAngle, currentBackflipTargetAngle);
+
+            float timeToGround = PredictBackflipTimeToGround();
+            if (timeToGround < 0f)
+                timeToGround = 0.45f;
+
+            timeToGround = Mathf.Max(0.12f, timeToGround);
+
+            float remainingAngle = Mathf.Max(0f, currentBackflipTargetAngle - backflipAccumulatedAngle);
+
+            float pitchBlend = Mathf.InverseLerp(
+                currentBackflipTargetAngle - 60f,
+                currentBackflipTargetAngle,
+                backflipAccumulatedAngle
+            );
+
+            float solvePitchRateDeg = Mathf.Clamp(
+                remainingAngle / timeToGround,
+                BackflipMinSolvePitchRateDeg,
+                BackflipMaxSolvePitchRateDeg
+            );
+
+            float desiredPitchRateDeg = Mathf.Lerp(
+                BackflipCruisePitchRateDeg,
+                solvePitchRateDeg,
+                pitchBlend
+            );
+
+            float desiredPitchRateRad = -desiredPitchRateDeg * Mathf.Deg2Rad;
+
+            float pitchAssist =
+                (desiredPitchRateRad - localAngularVelocity.x) * BackflipPitchRateGain
+                - localAngularVelocity.x * BackflipPitchDamping;
+
+            pitchAssist = Mathf.Clamp(
+                pitchAssist,
+                -BackflipMaxPitchAssist,
+                BackflipMaxPitchAssist
+            );
+
+            Vector3 flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (flatForward.sqrMagnitude < 0.0001f)
+                flatForward = backflipLaunchForwardFlat;
+            else
+                flatForward.Normalize();
+
+            float lateralBlend = Mathf.InverseLerp(
+                currentBackflipTargetAngle - 40f,
+                currentBackflipTargetAngle,
+                backflipAccumulatedAngle
+            );
+
+            float yawError = Vector3.SignedAngle(flatForward, backflipLaunchForwardFlat, Vector3.up);
+            float yawAssist =
+                (yawError * Mathf.Deg2Rad * BackflipYawGain
+                - localAngularVelocity.y * BackflipYawDamping) * lateralBlend;
+
+            yawAssist = Mathf.Clamp(
+                yawAssist,
+                -BackflipMaxLateralAssist,
+                BackflipMaxLateralAssist
+            );
+
+            float rollAssist =
+                ((-LatTilt) * BackflipRollGain
+                - localAngularVelocity.z * BackflipRollDamping) * lateralBlend;
+
+            rollAssist = Mathf.Clamp(
+                rollAssist,
+                -BackflipMaxLateralAssist,
+                BackflipMaxLateralAssist
+            );
+
+            if (BackflipExtraHangForce > 0f &&
+                backflipHangTimer < BackflipExtraHangDuration &&
+                pitchBlend < 0.35f) {
+                m_Rigidbody.AddForce(-Physics.gravity * BackflipExtraHangForce, ForceMode.Acceleration);
+                backflipHangTimer += Time.fixedDeltaTime;
+            }
+
+            m_Rigidbody.AddRelativeTorque(pitchAssist, yawAssist, rollAssist, ForceMode.Acceleration);
+
+            // hand over to landing catch near the end
+            if (remainingAngle <= BackflipLandingCatchStartAngle) {
+                autoBackflipActive = false;
+                autoBackflipLandingCatchActive = true;
+            }
+
+            return true;
+        }
+        private bool UpdateAutoBackflipLandingCatch() {
+            if (!autoBackflipLandingCatchActive)
+                return false;
+
+            if (IsBodyTouchingWithoutWheels()) {
+                StopAutoBackflip();
+                autoBackflipLandingCatchActive = false;
+                return false;
+            }
+
+            if (Grounded()) {
+                StopAutoBackflip();
+                return false;
+            }
+
+            Vector3 localAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
+
+            // kill remaining pitch speed so it does not continue into extra flips
+            float pitchAssist = -localAngularVelocity.x * BackflipLandingCatchPitchDamping;
+
+            Vector3 flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (flatForward.sqrMagnitude < 0.0001f)
+                flatForward = backflipLaunchForwardFlat;
+            else
+                flatForward.Normalize();
+
+            float yawError = Vector3.SignedAngle(flatForward, backflipLaunchForwardFlat, Vector3.up);
+            float yawAssist =
+                yawError * Mathf.Deg2Rad * BackflipLandingCatchYawGain
+                - localAngularVelocity.y * BackflipLandingCatchYawDamping;
+
+            yawAssist = Mathf.Clamp(
+                yawAssist,
+                -BackflipLandingCatchMaxAssist,
+                BackflipLandingCatchMaxAssist
+            );
+
+            float rollAssist =
+                (-LatTilt) * BackflipLandingCatchRollGain
+                - localAngularVelocity.z * BackflipLandingCatchRollDamping;
+
+            rollAssist = Mathf.Clamp(
+                rollAssist,
+                -BackflipLandingCatchMaxAssist,
+                BackflipLandingCatchMaxAssist
+            );
+
+            m_Rigidbody.AddRelativeTorque(pitchAssist, yawAssist, rollAssist, ForceMode.Acceleration);
+            return true;
+        }
+        #endregion
+
         #region Upside Down To Side Roll
         [Header("Upside Down To Side Roll")]
         public bool EnableUpsideDownToSideRoll = true;
@@ -1056,6 +1333,11 @@ namespace CustomVP {
                     RacingManager.Instance.CollidedWithCheckpoint(component);
                 }
             }
+
+            if (EnableAutoBackflip && other.CompareTag(BackflipLaunchTag)) {
+                backflipArmed = true;
+                backflipArmTime = Time.time;
+            }
         }
 
         private void OnDrawGizmos() {
@@ -1096,6 +1378,34 @@ namespace CustomVP {
             }
 
             DoCarHandling();
+            
+            if (IsBodyTouchingWithoutWheels()) {
+                StopAutoBackflip();
+                autoBackflipLandingCatchActive = false;
+                backflipArmed = false;
+            }
+
+            bool groundedNow = Grounded();
+
+            if (backflipArmed && Time.time - backflipArmTime > BackflipArmMemory) {
+                backflipArmed = false;
+            }
+
+            bool justLaunched = !groundedNow && wasGroundedLastFrame;
+
+            if (EnableAutoBackflip &&
+                justLaunched &&
+                backflipArmed &&
+                Mathf.Abs(Speed) >= BackflipMinLaunchSpeed) {
+                StartAutoBackflip();
+            }
+
+            if (groundedNow && autoBackflipActive) {
+                StopAutoBackflip();
+            }
+
+            wasGroundedLastFrame = groundedNow;
+
             DoUpsideDownToSideRoll();
 
             if (!upsideDownRollActive) {
@@ -1484,6 +1794,13 @@ namespace CustomVP {
             else {
                 StartAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
                 FlyingTime = 0f;
+            }
+
+            if (flag && UpdateAutoBackflip()) {
+                return;
+            }
+            if (flag && UpdateAutoBackflipLandingCatch()) {
+                return;
             }
 
             if (TouchingGround) {

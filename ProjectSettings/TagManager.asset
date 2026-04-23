@@ -4,7 +4,13 @@
 TagManager:
   serializedVersion: 2
   tags:
-  - BackflipRamp
+  - Coin
+  - Destructible
+  - fireworks
+  - FlipStunt
+  - NoHit
+  - Ground
+  - BackflipLaunch
   layers:
   - Default
   - TransparentFX
