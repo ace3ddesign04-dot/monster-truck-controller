@@ -450,7 +450,7 @@ namespace CustomVP {
         }
         private void DoSideSelfRight() {
             sideSelfRightActive = false;
-            
+
             if (upsideDownRollActive)
                 return;
 
@@ -688,8 +688,24 @@ namespace CustomVP {
         public float SideWheelieDamping = 7f;
         public float SideWheelieMaxAssist = 20f;
 
+        public float SideWheelieCounterSteerRollReduction = 0.10f;
+        public float SideWheelieCounterSteerExtraBalance = 4f;
+        public float SideWheelieCounterSteerExtraDamping = 4f;
+        public float SideWheelieCounterSteerCOMReturn = 0.35f;
+
         public bool sideWheeliAssistEnabled;
 
+        private float GetCounterSteerFactor(bool leftGrounded, bool rightGrounded) {
+            // left wheels on ground, right wheels in air -> right steer is the unstable direction
+            if (leftGrounded && !rightGrounded)
+                return Mathf.Clamp01(xInput);
+
+            // right wheels on ground, left wheels in air -> left steer is the unstable direction
+            if (rightGrounded && !leftGrounded)
+                return Mathf.Clamp01(-xInput);
+
+            return 0f;
+        }
         private void UpdateSideWheelieIntent() {
             if (!sideWheeliStuntActive || sideSelfRightActive) {
                 sideWheelieIntentTimer = 0f;
@@ -832,13 +848,20 @@ namespace CustomVP {
             if (!EnableSideWheelieCOMShift || !useManualCenterOfMass)
                 return baseCOM;
 
+            Vector3 targetCOM = baseCOM;
+
             if (sideWheelieCOMState == -1 && leftWheeliCOM != null)
-                return leftWheeliCOM.localPosition;
+                targetCOM = leftWheeliCOM.localPosition;
+            else if (sideWheelieCOMState == 1 && rightWheeliCOM != null)
+                targetCOM = rightWheeliCOM.localPosition;
 
-            if (sideWheelieCOMState == 1 && rightWheeliCOM != null)
-                return rightWheeliCOM.localPosition;
+            bool leftGrounded = wheels.Count >= 4 && (wheels[0].wc.IsGrounded || wheels[2].wc.IsGrounded);
+            bool rightGrounded = wheels.Count >= 4 && (wheels[1].wc.IsGrounded || wheels[3].wc.IsGrounded);
 
-            return baseCOM;
+            float counterSteer = GetCounterSteerFactor(leftGrounded, rightGrounded);
+
+            // when steering against the wheelie, bring COM slightly back toward base
+            return Vector3.Lerp(targetCOM, baseCOM, counterSteer * SideWheelieCounterSteerCOMReturn);
         }
 
         private void UpdateCenterOfMass() {
@@ -889,11 +912,19 @@ namespace CustomVP {
             float currentRoll = Vector3.Dot(transform.right, Vector3.up);
             float targetRoll = leftGrounded ? SideWheelieTargetRoll : -SideWheelieTargetRoll;
 
+            float counterSteer = GetCounterSteerFactor(leftGrounded, rightGrounded);
+
+            // reduce how extreme the wheelie stays when steering against it
+            targetRoll = Mathf.MoveTowards(targetRoll, 0f, counterSteer * SideWheelieCounterSteerRollReduction);
+
             Vector3 localAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
             float rollRate = localAngularVelocity.z;
 
+            float balanceForce = SideWheelieBalanceForce + counterSteer * SideWheelieCounterSteerExtraBalance;
+            float damping = SideWheelieDamping + counterSteer * SideWheelieCounterSteerExtraDamping;
+
             float error = targetRoll - currentRoll;
-            float assist = error * SideWheelieBalanceForce - rollRate * SideWheelieDamping;
+            float assist = error * balanceForce - rollRate * damping;
             assist = Mathf.Clamp(assist, -SideWheelieMaxAssist, SideWheelieMaxAssist);
 
             m_Rigidbody.AddRelativeTorque(0f, 0f, assist, ForceMode.Acceleration);
@@ -1378,7 +1409,7 @@ namespace CustomVP {
             }
 
             DoCarHandling();
-            
+
             if (IsBodyTouchingWithoutWheels()) {
                 StopAutoBackflip();
                 autoBackflipLandingCatchActive = false;
