@@ -53,6 +53,9 @@ namespace CustomVP {
                 OnDonutEnter.Invoke();
 
                 donutAccumulatedYaw = 0f;
+                donutCompletedRounds = 0;
+                currentDonutTargetYawRate = DonutTargetYawRate;
+
                 donutPrevForwardFlat = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
                 if (donutPrevForwardFlat.sqrMagnitude > 0.0001f)
                     donutPrevForwardFlat.Normalize();
@@ -69,6 +72,7 @@ namespace CustomVP {
 
                         while (Mathf.Abs(donutAccumulatedYaw) >= 360f) {
                             donutAccumulatedYaw -= Mathf.Sign(donutAccumulatedYaw) * 360f;
+                            donutCompletedRounds++;
                             OnDonutRoundComplete.Invoke();
                         }
                     }
@@ -79,6 +83,8 @@ namespace CustomVP {
             else if (!donutState && donutEventPrevState) {
                 OnDonutExit.Invoke();
                 donutAccumulatedYaw = 0f;
+                donutCompletedRounds = 0;
+                currentDonutTargetYawRate = DonutTargetYawRate;
                 donutPrevForwardFlat = Vector3.zero;
             }
 
@@ -914,6 +920,14 @@ namespace CustomVP {
         public float donutIntentTimer = 0;
         public float donutIntentTime = 3.0f;
 
+        [Header("Donut Yaw Rate Boost")]
+        public int DonutYawRateBoostStartRound = 2;   // x rotations
+        public float DonutBoostedYawRate = 4.2f;      // y amount
+        public float DonutYawRateBoostLerpSpeed = 2.5f;
+
+        private int donutCompletedRounds = 0;
+        private float currentDonutTargetYawRate = 0f;
+
         private bool UpdateDonutIntent() {
             if (!donutStuntActive || sideSelfRightActive) {
                 return false;
@@ -974,7 +988,16 @@ namespace CustomVP {
             Vector3 localAngularVelocity = transform.InverseTransformVector(m_Rigidbody.angularVelocity);
             float yawRate = localAngularVelocity.y;
 
-            float targetYawRate = steerDir * DonutTargetYawRate;
+            float desiredYawRate = (donutCompletedRounds >= DonutYawRateBoostStartRound) ? DonutBoostedYawRate : DonutTargetYawRate;
+
+            currentDonutTargetYawRate = Mathf.MoveTowards(
+                currentDonutTargetYawRate,
+                desiredYawRate,
+                DonutYawRateBoostLerpSpeed * Time.fixedDeltaTime
+            );
+
+            float targetYawRate = steerDir * currentDonutTargetYawRate;
+
             float yawError = targetYawRate - yawRate;
 
             float assist = yawError * DonutYawAssistForce - yawRate * DonutYawDamping;
