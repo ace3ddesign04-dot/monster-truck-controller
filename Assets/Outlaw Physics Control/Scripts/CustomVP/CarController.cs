@@ -107,6 +107,7 @@ namespace CustomVP {
 
         #region Rear Wheeling
         [Header("Wheelie Hold")]
+        public bool EnableWheelieStunt = true;
         public bool EnableWheelieHold = false;
         public float WheelingAngle = 0.16f;
 
@@ -133,6 +134,15 @@ namespace CustomVP {
 
         private float wheelieEntrySpeedGraceTimer = 0f;
 
+        [Header("Exit Wheeling With Throttle")]
+        public float WheelieNoThrottleExitTime = 0.35f;
+        private float wheelieNoThrottleTimer = 0f;
+
+        [Header("Wheeling with throttle")]
+        public float WheelieAngleDropSpeed = 12f;
+        public float WheelieAngleRaiseThrottleThreshold = 0.05f;
+        private float cachedWheelieAngle = 0f;
+
         [Header("Reverse Snap To Wheelie")]
         public float ReverseSnapMinReverseSpeed = 6f;
         public float ReverseSnapForwardBoostSpeed = 8f;   // mph
@@ -142,6 +152,19 @@ namespace CustomVP {
         private float currentWheelieAngle = 0f;
 
         private void DoWheelieHoldAssist() {
+            if (!EnableWheelieStunt) {
+                EnableWheelieHold = false;
+                wheelieEntrySpeedGraceTimer = 0f;
+                wheelieNoThrottleTimer = 0f;
+
+                currentWheelieAngle = Mathf.MoveTowards(
+                    currentWheelieAngle,
+                    0f,
+                    Time.fixedDeltaTime * WheelieAngleDropSpeed
+                );
+                return;
+            }
+
             if (wheelieEntrySpeedGraceTimer > 0f) {
                 wheelieEntrySpeedGraceTimer -= Time.fixedDeltaTime;
             }
@@ -150,27 +173,52 @@ namespace CustomVP {
             bool canUseMinSpeedExit = wheelieEntrySpeedGraceTimer <= 0f;
 
             if (EnableWheelieHold) {
+                if (releasedThrottle) {
+                    wheelieNoThrottleTimer += Time.fixedDeltaTime;
+                }
+                else {
+                    wheelieNoThrottleTimer = 0f;
+                }
+
                 if (IsOtherStuntBlockingWheelie()) {
+                    EnableWheelieHold = false;
+                }
+                else if (wheelieNoThrottleTimer >= WheelieNoThrottleExitTime) {
                     EnableWheelieHold = false;
                 }
                 else if (releasedThrottle && canUseMinSpeedExit && Speed <= WheelieExitMinSpeed) {
                     EnableWheelieHold = false;
                 }
             }
+            else {
+                wheelieNoThrottleTimer = 0f;
+            }
 
             if (!EnableWheelieHold || rearCOM == null) {
                 currentWheelieAngle = Mathf.MoveTowards(
                     currentWheelieAngle,
                     0f,
-                    Time.fixedDeltaTime * WheelieAngleLerpSpeed
+                    Time.fixedDeltaTime * WheelieAngleDropSpeed
                 );
                 return;
             }
 
+            float throttle01 = Mathf.Clamp01(Throttle);
+
+            float targetWheelieAngle =
+                (throttle01 > WheelieAngleRaiseThrottleThreshold)
+                ? cachedWheelieAngle * throttle01
+                : 0f;
+
+            float angleMoveSpeed =
+                (targetWheelieAngle > currentWheelieAngle)
+                ? WheelieAngleLerpSpeed
+                : WheelieAngleDropSpeed;
+
             currentWheelieAngle = Mathf.MoveTowards(
                 currentWheelieAngle,
-                WheelingAngle,
-                Time.fixedDeltaTime * WheelieAngleLerpSpeed
+                targetWheelieAngle,
+                Time.fixedDeltaTime * angleMoveSpeed
             );
 
             if (!RearAxleGrounded())
@@ -240,8 +288,6 @@ namespace CustomVP {
         public string BackflipLaunchTag = "BackflipLaunch";
         public float BackflipArmMemory = 0.35f;
         public float BackflipMinLaunchSpeed = 8f;
-
-        public float BackflipTargetAngle = 360f;
 
         public float BackflipPitchRateGain = 12f;
         public float BackflipPitchDamping = 3f;
@@ -1155,7 +1201,7 @@ namespace CustomVP {
                 manualCenterOfMass = comBase.localPosition;
 
             // hard snap to rear COM while wheelie hold is enabled
-            if (EnableWheelieHold && rearCOM != null) {
+            if (EnableWheelieStunt && EnableWheelieHold && rearCOM != null) {
                 SetCOM(rearCOM.localPosition);
                 return;
             }
@@ -1507,6 +1553,8 @@ namespace CustomVP {
         }
 
         private void Start() {
+            
+            cachedWheelieAngle = WheelingAngle;
 
             OnWheelieEnter.AddListener(() => { print("Stunt: -=> Wheeling Entered"); });
             OnWheelieExit.AddListener(() => { print("Stunt: -=> Wheeling Exit"); });
@@ -2544,7 +2592,7 @@ namespace CustomVP {
         private void DoCarHandling() {
             Handbraking = (CrossPlatformInputManager.GetButton("Ebrake") ? 1 : 0);
 
-            bool abruptReverseToForward = !IsOtherStuntBlockingWheelie() && Grounded() && Speed <= -ReverseSnapMinReverseSpeed && yInput >= 0.95f;
+            bool abruptReverseToForward = EnableWheelieStunt && !IsOtherStuntBlockingWheelie() && Grounded() && Speed <= -ReverseSnapMinReverseSpeed && yInput >= 0.95f;
 
             float target = 0f;
             if (!abruptReverseToForward && (Speed > 1f || transmissionType == TransmissionType.Manual)) {
@@ -2578,8 +2626,10 @@ namespace CustomVP {
 
                 if (!reverseSnapWasTriggering) {
                     EnableWheelieHold = true;
+                    cachedWheelieAngle = WheelingAngle;
                     currentWheelieAngle = 0f;
                     wheelieEntrySpeedGraceTimer = WheelieEntrySpeedGraceTime;
+                    wheelieNoThrottleTimer = 0f;
                 }
             }
 
