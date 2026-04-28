@@ -6,6 +6,7 @@ namespace UnityStandardAssets.CrossPlatformInput
 {
 	public class AxisTouchButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IEventSystemHandler
 	{
+		public bool pressed;
 		public string axisName = "Horizontal";
 
 		public float axisValue = 1f;
@@ -66,6 +67,7 @@ namespace UnityStandardAssets.CrossPlatformInput
 
 		public void OnPointerDown(PointerEventData data)
 		{
+			pressed = true;
 			if (!(AxisSlider != null))
 			{
 				if (m_PairedWith == null)
@@ -78,7 +80,8 @@ namespace UnityStandardAssets.CrossPlatformInput
 
 		public void OnPointerUp(PointerEventData data)
 		{
-			if (AxisSlider != null)
+            pressed = false;
+            if (AxisSlider != null)
 			{
 				AxisSlider.value = 0f;
 			}

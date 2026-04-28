@@ -16,6 +16,12 @@ public class CameraController : MonoBehaviour
 		Cinematic
 	}
 
+    [Header("Wheelie Camera")]
+    public bool LockCameraDuringWheelie = true;
+    public float WheelieCameraYAngle = 16f;
+    public float WheelieCameraDistance = 7f;
+    public float WheelieCameraHeightOffset = 1.25f;
+
     [Header("Donut Camera")]
     public bool LockCameraDuringDonut = true;
     public float DonutCameraYAngle = 12f;
@@ -25,10 +31,6 @@ public class CameraController : MonoBehaviour
 
     [Header("Self Recovery Camera")]
     public bool LockCameraDuringRecover = true;
-    public float RecoverCameraYAngle = 12f;
-    public float RecoverCameraDistance = 7f;
-    private bool recoverCameraLocked;
-    private float recoverLockedXAngle;
 
     public static CameraController Instance;
 
@@ -201,6 +203,12 @@ public class CameraController : MonoBehaviour
 		return carController.sideSelfRightActive && Mathf.Abs(carController.yInput) > 0.9f;
 
     }
+    private bool IsWheelieCameraActive() {
+        if (carController == null)
+            return false;
+
+        return carController.EnableWheelieHold;
+    }
 
     public void Shake()
 	{
@@ -344,7 +352,8 @@ public class CameraController : MonoBehaviour
             case CameraMode.Follow:
                 if (carController != null) {
                     bool donutCam = LockCameraDuringDonut && IsDonutCameraActive();
-					bool recoverCam = LockCameraDuringRecover && IsRecoverCameraActive();
+                    bool recoverCam = LockCameraDuringRecover && IsRecoverCameraActive();
+                    bool wheelieCam = LockCameraDuringWheelie && IsWheelieCameraActive();
 
                     if (donutCam || recoverCam) {
                         if (!donutCameraLocked) {
@@ -361,7 +370,21 @@ public class CameraController : MonoBehaviour
                             TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
                         }
 
-                        DoSphereCam(true);
+                        DoSphereCam(true, 0f);
+                    }
+                    else if (wheelieCam) {
+                        donutCameraLocked = false;
+
+                        AngleX = 0f;
+                        desiredYAngle = WheelieCameraYAngle;
+                        DistanceCamTarget = WheelieCameraDistance;
+
+                        bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
+                        if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
+                            TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
+                        }
+
+                        DoSphereCam(false, WheelieCameraHeightOffset);
                     }
                     else {
                         donutCameraLocked = false;
@@ -382,7 +405,7 @@ public class CameraController : MonoBehaviour
                             TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
                         }
 
-                        DoSphereCam(false);
+                        DoSphereCam(false, 0f);
                     }
                 }
                 break;
@@ -492,16 +515,20 @@ public class CameraController : MonoBehaviour
 		}
 	}
 
-	private void DoSphereCam(bool lockXAngle)
-	{
-		TargetYAngle = Mathf.Clamp(TargetYAngle, -45f, YMax);
-		AngleY = TargetYAngle;
-		DistanceCam = Mathf.Lerp(DistanceCam, DistanceCamTarget, 10f * Time.deltaTime);
-		bool flag = false;
-		if (carController != null && carController.WheelsOffTheGround < carController.wheels.Count)
-		{
-			flag = true;
-		}
+    private void DoSphereCam(bool lockXAngle) {
+        DoSphereCam(lockXAngle, 0f);
+    }
+
+    private void DoSphereCam(bool lockXAngle, float targetHeightOffset) {
+        TargetYAngle = Mathf.Clamp(TargetYAngle, -45f, YMax);
+        AngleY = TargetYAngle;
+        DistanceCam = Mathf.Lerp(DistanceCam, DistanceCamTarget, 10f * Time.deltaTime);
+
+        bool flag = false;
+        if (carController != null && carController.WheelsOffTheGround < carController.wheels.Count) {
+            flag = true;
+        }
+
         if (flag && !lockXAngle) {
             Vector3 eulerAngles = target.transform.eulerAngles;
             float y = eulerAngles.y;
@@ -510,41 +537,49 @@ public class CameraController : MonoBehaviour
         else if (lockXAngle) {
             CurrentXAngle = donutLockedXAngle;
         }
+
         float num;
-		if (flag)
-		{
-			Vector3 eulerAngles2 = target.transform.eulerAngles;
-			num = eulerAngles2.x;
-		}
-		else
-		{
-			num = 0f;
-		}
-		float num2 = num;
-		if (AngleX == 180f)
-		{
-			num2 = 0f - num2;
-		}
-		if (cameraMode == CameraMode.Follow)
-		{
-			CurrentYAngle = Mathf.LerpAngle(CurrentYAngle, num2, HeightDamping * Time.deltaTime);
-		}
-		Vector3 b = UnityEngine.Random.onUnitSphere * ShakeAmount * ShakeAmplitude;
-		Quaternion rotation = Quaternion.Euler(CurrentYAngle + AngleY, CurrentXAngle + AngleX, 0f);
-		Vector3 position = target.transform.position - rotation * Vector3.forward * DistanceCam;
-		int num3 = 0;
-		while (Physics.CheckSphere(position, 0.5f) && num3 < 20)
-		{
-			num3++;
-			TargetYAngle += 1f;
-			AngleY = TargetYAngle;
-			rotation = Quaternion.Euler(CurrentYAngle + AngleY, CurrentXAngle + AngleX, 0f);
-			position = target.transform.position - rotation * Vector3.forward * DistanceCam;
-		}
-		Quaternion rotation2 = Quaternion.Slerp(base.transform.rotation, Quaternion.Euler(CurrentYAngle + AngleY, CurrentXAngle + AngleX, 0f), Time.deltaTime * 10f);
-		Vector3 position2 = target.transform.position - rotation2 * Vector3.forward * DistanceCam + b;
-		CameraDislocated = (AngleY != TargetYAngle);
-		base.transform.position = position2;
-		base.transform.rotation = rotation2;
-	}
+        if (flag) {
+            Vector3 eulerAngles2 = target.transform.eulerAngles;
+            num = eulerAngles2.x;
+        }
+        else {
+            num = 0f;
+        }
+
+        float num2 = num;
+        if (AngleX == 180f) {
+            num2 = 0f - num2;
+        }
+
+        if (cameraMode == CameraMode.Follow) {
+            CurrentYAngle = Mathf.LerpAngle(CurrentYAngle, num2, HeightDamping * Time.deltaTime);
+        }
+
+        Vector3 b = UnityEngine.Random.onUnitSphere * ShakeAmount * ShakeAmplitude;
+        Quaternion rotation = Quaternion.Euler(CurrentYAngle + AngleY, CurrentXAngle + AngleX, 0f);
+
+        Vector3 targetPos = target.transform.position + Vector3.up * targetHeightOffset;
+        Vector3 position = targetPos - rotation * Vector3.forward * DistanceCam;
+
+        int num3 = 0;
+        while (Physics.CheckSphere(position, 0.5f) && num3 < 20) {
+            num3++;
+            TargetYAngle += 1f;
+            AngleY = TargetYAngle;
+            rotation = Quaternion.Euler(CurrentYAngle + AngleY, CurrentXAngle + AngleX, 0f);
+            position = targetPos - rotation * Vector3.forward * DistanceCam;
+        }
+
+        Quaternion rotation2 = Quaternion.Slerp(
+            base.transform.rotation,
+            Quaternion.Euler(CurrentYAngle + AngleY, CurrentXAngle + AngleX, 0f),
+            Time.deltaTime * 10f
+        );
+
+        Vector3 position2 = targetPos - rotation2 * Vector3.forward * DistanceCam + b;
+        CameraDislocated = (AngleY != TargetYAngle);
+        base.transform.position = position2;
+        base.transform.rotation = rotation2;
+    }
 }
