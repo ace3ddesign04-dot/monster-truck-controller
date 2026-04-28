@@ -1,17 +1,111 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityStandardAssets.CrossPlatformInput;
 
 namespace CustomVP {
     public class CarController : MonoBehaviour {
+
+        #region Stunt Events
+        [Header("Stunt Events")]
+        public UnityEvent OnWheelieEnter;
+        public UnityEvent OnWheelieExit;
+        public UnityEvent OnSideWheelieEnter;
+        public UnityEvent OnSideWheelieExit;
+        public UnityEvent OnDonutEnter;
+        public UnityEvent OnDonutExit;
+        public UnityEvent OnDonutRoundComplete;
+        public UnityEvent OnSideSelfRightEnter;
+        public UnityEvent OnSideSelfRightRecovered;
+
+        private bool wheelieEventPrevState = false;
+        private bool sideWheelieEventPrevState = false;
+        private bool donutEventPrevState = false;
+        private bool sideSelfRightEventPrevState = false;
+
+        private bool donutStateActive = false;
+        private float donutAccumulatedYaw = 0f;
+        private Vector3 donutPrevForwardFlat = Vector3.zero;
+
+        private void UpdateStuntEvents() {
+            // Wheelie
+            bool wheelieState = EnableWheelieHold;
+            if (wheelieState && !wheelieEventPrevState)
+                OnWheelieEnter.Invoke();
+            else if (!wheelieState && wheelieEventPrevState)
+                OnWheelieExit.Invoke();
+
+            wheelieEventPrevState = wheelieState;
+
+            // Side wheelie
+            bool sideWheelieState = sideWheelieCOMState != 0 || sideWheeliAssistEnabled;
+            if (sideWheelieState && !sideWheelieEventPrevState)
+                OnSideWheelieEnter.Invoke();
+            else if (!sideWheelieState && sideWheelieEventPrevState)
+                OnSideWheelieExit.Invoke();
+
+            sideWheelieEventPrevState = sideWheelieState;
+
+            // Donut
+            bool donutState = donutStateActive;
+
+            if (donutState && !donutEventPrevState) {
+                OnDonutEnter.Invoke();
+
+                donutAccumulatedYaw = 0f;
+                donutPrevForwardFlat = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+                if (donutPrevForwardFlat.sqrMagnitude > 0.0001f)
+                    donutPrevForwardFlat.Normalize();
+            }
+
+            if (donutState) {
+                Vector3 currentFlatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+                if (currentFlatForward.sqrMagnitude > 0.0001f) {
+                    currentFlatForward.Normalize();
+
+                    if (donutPrevForwardFlat.sqrMagnitude > 0.0001f) {
+                        float deltaYaw = Vector3.SignedAngle(donutPrevForwardFlat, currentFlatForward, Vector3.up);
+                        donutAccumulatedYaw += deltaYaw;
+
+                        while (Mathf.Abs(donutAccumulatedYaw) >= 360f) {
+                            donutAccumulatedYaw -= Mathf.Sign(donutAccumulatedYaw) * 360f;
+                            OnDonutRoundComplete.Invoke();
+                        }
+                    }
+
+                    donutPrevForwardFlat = currentFlatForward;
+                }
+            }
+            else if (!donutState && donutEventPrevState) {
+                OnDonutExit.Invoke();
+                donutAccumulatedYaw = 0f;
+                donutPrevForwardFlat = Vector3.zero;
+            }
+
+            donutEventPrevState = donutState;
+
+            // Side self right
+            // Side self right
+            bool recoverState = sideSelfRightActive;
+
+            if (recoverState && !sideSelfRightEventPrevState) {
+                OnSideSelfRightEnter.Invoke();
+            }
+
+            sideSelfRightEventPrevState = recoverState;
+        }
+        #endregion
+
         public bool vehicleIsActive;
 
         public Transform rearCOM;
+
         
         [Header("Wheelie Drive")]
         [Range(0f, 1f)] public float WheelieFrontDriveMultiplier = 0f;
         public float WheelieRearDriveMultiplier = 2.2f;
 
+        #region Rear Wheeling
         [Header("Wheelie Hold")]
         public bool EnableWheelieHold = false;
         public float WheelingAngle = 0.16f;
@@ -138,6 +232,7 @@ namespace CustomVP {
                 donutTryingOrActive ||
                 sideWheelieActive;
         }
+        #endregion
 
         #region Auto Backflip
         [Header("Auto Backflip")]
@@ -532,6 +627,12 @@ namespace CustomVP {
         private bool sideSelfRightLowGripApplied = false;
         private float sideSelfRightLockedRoll = 0f;
 
+        public float SideSelfRightRecoveredEventWindow = 0.75f;
+        public float SideSelfRightRecoveredEventRollThreshold = 0.35f;
+
+        private bool sideSelfRightRecoveryEventPending = false;
+        private float sideSelfRightRecoveryEventTimer = 0f;
+
         private float GetCurrentLatTilt() {
             Vector3 flatRight = Vector3.ProjectOnPlane(transform.right, Vector3.up);
             float latTilt = (transform.right - flatRight).y;
@@ -581,6 +682,53 @@ namespace CustomVP {
             SetSelfRightWheelGrip(1f);
             sideSelfRightLowGripApplied = false;
         }
+        private void ArmSideSelfRightRecoveredEvent() {
+            sideSelfRightRecoveryEventPending = true;
+            sideSelfRightRecoveryEventTimer = SideSelfRightRecoveredEventWindow;
+        }
+
+        private void UpdateSideSelfRightRecoveredEvent() {
+            if (!sideSelfRightRecoveryEventPending)
+                return;
+
+            sideSelfRightRecoveryEventTimer -= Time.fixedDeltaTime;
+
+            bool recoveredUpright =
+                Grounded() &&
+                Mathf.Abs(Vector3.Dot(transform.right, Vector3.up)) < SideSelfRightRecoveredEventRollThreshold;
+
+            if (recoveredUpright) {
+                sideSelfRightRecoveryEventPending = false;
+                sideSelfRightRecoveryEventTimer = 0f;
+                OnSideSelfRightRecovered?.Invoke();
+                return;
+            }
+
+            if (sideSelfRightRecoveryEventTimer <= 0f) {
+                sideSelfRightRecoveryEventPending = false;
+                sideSelfRightRecoveryEventTimer = 0f;
+            }
+        }
+        private void FinishSideSelfRight(bool recovered) {
+            bool wasLatched = sideSelfRightLatched;
+
+            sideSelfRightActive = false;
+            sideSelfRightLatched = false;
+            sideSelfRightTimer = 0f;
+            RestoreSelfRightWheelGrip();
+
+            if (!wasLatched)
+                return;
+
+            if (recovered) {
+                sideSelfRightRecoveryEventPending = false;
+                sideSelfRightRecoveryEventTimer = 0f;
+                OnSideSelfRightRecovered?.Invoke();
+            }
+            else {
+                ArmSideSelfRightRecoveredEvent();
+            }
+        }
         private void DoSideSelfRight() {
             sideSelfRightActive = false;
 
@@ -594,17 +742,17 @@ namespace CustomVP {
                     return;
                 }
 
+                sideSelfRightRecoveryEventPending = false;
+                sideSelfRightRecoveryEventTimer = 0f;
+
                 sideSelfRightLatched = true;
                 sideSelfRightTimer = 0f;
                 sideSelfRightLockedRoll = Vector3.Dot(transform.right, Vector3.up);
             }
 
-            if ((!TouchingGround && !Grounded()) ||
-                Mathf.Abs(Speed) > SideSelfRightMaxSpeed ||
-                Throttle < SideSelfRightMinThrottle) {
-                sideSelfRightLatched = false;
-                sideSelfRightTimer = 0f;
-                RestoreSelfRightWheelGrip();
+            if ((!TouchingGround && !Grounded()) || Mathf.Abs(Speed) > SideSelfRightMaxSpeed || Throttle < SideSelfRightMinThrottle) { 
+                bool recoveredUpright = Grounded() && Mathf.Abs(Vector3.Dot(transform.right, Vector3.up)) < 0.30f;
+                FinishSideSelfRight(recoveredUpright);
                 return;
             }
 
@@ -692,9 +840,8 @@ namespace CustomVP {
             m_Rigidbody.AddRelativeTorque(0f, 0f, rollAssist, ForceMode.Acceleration);
 
             if (Mathf.Abs(currentRoll2) < 0.18f && Grounded()) {
-                sideSelfRightLatched = false;
-                sideSelfRightTimer = 0f;
-                RestoreSelfRightWheelGrip();
+                FinishSideSelfRight(true);
+                return;
             }
         }
 
@@ -758,10 +905,13 @@ namespace CustomVP {
         }
 
         private void DoDonutAssist() {
-            if (!donutStuntActive || sideSelfRightActive)
+            if (!donutStuntActive || sideSelfRightActive) {
+                donutStateActive = false;
                 return;
+            }
 
-            bool donutActive = UpdateDonutIntent();
+            donutStateActive = UpdateDonutIntent();
+            bool donutActive = donutStateActive;
 
             EnableSideWheelieAssist = !donutActive;
             EnableSideWheelieCOMShift = !donutActive;
@@ -1357,6 +1507,17 @@ namespace CustomVP {
         }
 
         private void Start() {
+
+            OnWheelieEnter.AddListener(() => { print("Stunt: -=> Wheeling Entered"); });
+            OnWheelieExit.AddListener(() => { print("Stunt: -=> Wheeling Exit"); });
+            OnSideWheelieEnter.AddListener(() => { print("Stunt: -=> Side Wheeling Entered"); });
+            OnSideWheelieExit.AddListener(() => { print("Stunt: -=> Side Wheeling Exit"); });
+            OnDonutEnter.AddListener(() => { print("Stunt: -=> Donut Entered"); });
+            OnDonutExit.AddListener(() => { print("Stunt: -=> Donut Exit"); });
+            OnDonutRoundComplete.AddListener(() => { print("Stunt: -=> Donut Round Completed"); });
+            OnSideSelfRightEnter.AddListener(() => { print("Stunt: -=> side self right entered"); });
+            OnSideSelfRightRecovered.AddListener(() => { print("Stunt: -=> Side self recovered"); });
+
             if (comBase != null) {
                 manualCenterOfMass = comBase.localPosition;
             }
@@ -1594,6 +1755,8 @@ namespace CustomVP {
             DoAntiroll();
             DoDonutAssist();
             DoSideWheelieAssist();
+            UpdateSideSelfRightRecoveredEvent();
+            UpdateStuntEvents();
 
             acceleration = (m_Rigidbody.velocity - lastVelocity) / Time.fixedDeltaTime;
             acceleration = transform.InverseTransformVector(acceleration);
