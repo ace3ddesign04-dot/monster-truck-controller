@@ -316,11 +316,7 @@ namespace CustomVP {
         public float BackflipMinSolvePitchRateDeg = 140f;
         public float BackflipMaxSolvePitchRateDeg = 280f;
 
-        public bool EnableSpeedBasedDoubleBackflip = true;
-        public float DoubleBackflipSpeedThreshold = 42f;
-
-        public float SingleBackflipTargetAngle = 360f;
-        public float DoubleBackflipTargetAngle = 720f;
+        public float BackflipTargetAngle = 360f;
 
         public float BackflipLandingCatchStartAngle = 40f;   // start catch when this much angle remains
         public float BackflipLandingCatchPitchDamping = 10f;
@@ -332,7 +328,7 @@ namespace CustomVP {
         public float BackflipLandingCatchRollDamping = 6f;
         public float BackflipLandingCatchMaxAssist = 18f;
 
-        private float currentBackflipTargetAngle = 360f;
+        private float currentBackflipTargetAngle = 0f;
         private bool autoBackflipLandingCatchActive = false;
 
         private bool backflipArmed = false;
@@ -344,6 +340,9 @@ namespace CustomVP {
         private float backflipAccumulatedAngle = 0f;
         private float backflipHangTimer = 0f;
 
+        public float BackflipWheelieBlockTime = 0.6f;
+        private float backflipWheelieBlockTimer = 0f;
+
         private bool IsBodyTouchingWithoutWheels() {
             return TouchingGround && !Grounded();
         }
@@ -354,10 +353,7 @@ namespace CustomVP {
             backflipAccumulatedAngle = 0f;
             backflipHangTimer = 0f;
 
-            currentBackflipTargetAngle =
-                (EnableSpeedBasedDoubleBackflip && Mathf.Abs(Speed) >= DoubleBackflipSpeedThreshold)
-                ? DoubleBackflipTargetAngle
-                : SingleBackflipTargetAngle;
+            currentBackflipTargetAngle = BackflipTargetAngle;
 
             backflipLaunchForwardFlat = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
             if (backflipLaunchForwardFlat.sqrMagnitude < 0.0001f)
@@ -366,10 +362,16 @@ namespace CustomVP {
         }
 
         private void StopAutoBackflip() {
+            bool wasBackflipRunning = autoBackflipActive || autoBackflipLandingCatchActive;
+
             autoBackflipActive = false;
             autoBackflipLandingCatchActive = false;
             backflipAccumulatedAngle = 0f;
             backflipHangTimer = 0f;
+
+            if (wasBackflipRunning) {
+                backflipWheelieBlockTimer = BackflipWheelieBlockTime;
+            }
         }
 
         private float PredictBackflipTimeToGround() {
@@ -1740,6 +1742,10 @@ namespace CustomVP {
             Speed = localVelocity.z * 2.23f;
             AngularSpeed = m_Rigidbody.angularVelocity.magnitude;
 
+            if (backflipWheelieBlockTimer > 0f) {
+                backflipWheelieBlockTimer -= Time.fixedDeltaTime;
+            }
+
             if (!vehicleIsActive) {
                 foreach (_Wheel wheel in wheels) {
                     wheel.wc.MotorTorque = 0f;
@@ -2592,7 +2598,13 @@ namespace CustomVP {
         private void DoCarHandling() {
             Handbraking = (CrossPlatformInputManager.GetButton("Ebrake") ? 1 : 0);
 
-            bool abruptReverseToForward = EnableWheelieStunt && !IsOtherStuntBlockingWheelie() && Grounded() && Speed <= -ReverseSnapMinReverseSpeed && yInput >= 0.95f;
+            bool abruptReverseToForward =
+                EnableWheelieStunt &&
+                backflipWheelieBlockTimer <= 0f &&
+                !IsOtherStuntBlockingWheelie() &&
+                Grounded() &&
+                Speed <= -ReverseSnapMinReverseSpeed &&
+                yInput >= 0.95f;
 
             float target = 0f;
             if (!abruptReverseToForward && (Speed > 1f || transmissionType == TransmissionType.Manual)) {
