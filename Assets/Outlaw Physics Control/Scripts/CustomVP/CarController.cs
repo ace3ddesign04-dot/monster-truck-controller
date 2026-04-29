@@ -157,6 +157,7 @@ namespace CustomVP {
         #endregion
 
         public bool vehicleIsActive;
+
         #region Nose Wheeling
 
         [Header("Nose Wheelie Stable Pose Lock")]
@@ -832,6 +833,7 @@ namespace CustomVP {
         }
 
         #endregion
+
         #region Rear Wheeling
 
         [Header("Wheelie Drive")]
