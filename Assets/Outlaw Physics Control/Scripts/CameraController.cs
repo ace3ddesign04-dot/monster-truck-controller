@@ -22,6 +22,13 @@ public class CameraController : MonoBehaviour
     public float WheelieCameraDistance = 7f;
     public float WheelieCameraHeightOffset = 1.25f;
 
+    [Header("Nose Wheelie Camera")]
+    public bool LockCameraDuringNoseWheelie = true;
+    public float NoseWheelieCameraYAngle = 18f;
+    public float NoseWheelieCameraDistance = 7.5f;
+    public float NoseWheelieCameraHeightOffset = 1.8f;
+    public float NoseWheelieCameraXAngle = 0f;
+
     [Header("Donut Camera")]
     public bool LockCameraDuringDonut = true;
     public float DonutCameraYAngle = 12f;
@@ -210,6 +217,13 @@ public class CameraController : MonoBehaviour
         return carController.EnableWheelieHold;
     }
 
+    private bool IsNoseWheelieCameraActive() {
+        if (carController == null)
+            return false;
+
+        return carController.EnableNoseWheelieHold;
+    }
+
     public void Shake()
 	{
 		ShakeAmount = 1f;
@@ -349,65 +363,80 @@ public class CameraController : MonoBehaviour
 			DistanceCamTarget = Mathf.Clamp(DistanceCamTarget - UnityEngine.Input.GetAxis("Mouse ScrollWheel") * 3f, MinDistance, MaxDistance * 2f);
 			DoSphereCam(false);
 			break;
-            case CameraMode.Follow:
-                if (carController != null) {
-                    bool donutCam = LockCameraDuringDonut && IsDonutCameraActive();
-                    bool recoverCam = LockCameraDuringRecover && IsRecoverCameraActive();
-                    bool wheelieCam = LockCameraDuringWheelie && IsWheelieCameraActive();
+        case CameraMode.Follow:
+            if (carController != null) {
+                bool donutCam = LockCameraDuringDonut && IsDonutCameraActive();
+                bool recoverCam = LockCameraDuringRecover && IsRecoverCameraActive();
+                bool noseWheelieCam = LockCameraDuringNoseWheelie && IsNoseWheelieCameraActive();
+                bool wheelieCam = LockCameraDuringWheelie && IsWheelieCameraActive();
 
-                    if (donutCam || recoverCam) {
-                        if (!donutCameraLocked) {
-                            donutCameraLocked = true;
-                            donutLockedXAngle = CurrentXAngle;
-                        }
-
-                        AngleX = 0f;
-                        desiredYAngle = DonutCameraYAngle;
-                        DistanceCamTarget = DonutCameraDistance;
-
-                        bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
-                        if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
-                            TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
-                        }
-
-                        DoSphereCam(true, 0f);
+                if (donutCam || recoverCam) {
+                    if (!donutCameraLocked) {
+                        donutCameraLocked = true;
+                        donutLockedXAngle = CurrentXAngle;
                     }
-                    else if (wheelieCam) {
-                        donutCameraLocked = false;
 
-                        AngleX = 0f;
-                        desiredYAngle = WheelieCameraYAngle;
-                        DistanceCamTarget = WheelieCameraDistance;
+                    AngleX = 0f;
+                    desiredYAngle = DonutCameraYAngle;
+                    DistanceCamTarget = DonutCameraDistance;
 
-                        bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
-                        if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
-                            TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
-                        }
-
-                        DoSphereCam(false, WheelieCameraHeightOffset);
+                    bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
+                    if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
+                        TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
                     }
-                    else {
-                        donutCameraLocked = false;
 
-                        if (carController.Speed >= 0f) {
-                            AngleX = 0f;
-                        }
-
-                        if (ForceRearView || (carController.Speed < -10f && carController.WheelsOffTheGround == 0)) {
-                            AngleX = 180f;
-                        }
-
-                        desiredYAngle = carController.FollowYAngle;
-                        DistanceCamTarget = carController.FollowDistance;
-
-                        bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
-                        if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
-                            TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
-                        }
-
-                        DoSphereCam(false, 0f);
-                    }
+                    DoSphereCam(true, 0f);
                 }
+                else if (noseWheelieCam) {
+                    donutCameraLocked = false;
+
+                    AngleX = NoseWheelieCameraXAngle;
+                    desiredYAngle = NoseWheelieCameraYAngle;
+                    DistanceCamTarget = NoseWheelieCameraDistance;
+
+                    bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
+                    if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
+                        TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
+                    }
+
+                    DoSphereCam(false, NoseWheelieCameraHeightOffset);
+                }
+                else if (wheelieCam) {
+                    donutCameraLocked = false;
+
+                    AngleX = 0f;
+                    desiredYAngle = WheelieCameraYAngle;
+                    DistanceCamTarget = WheelieCameraDistance;
+
+                    bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
+                    if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
+                        TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
+                    }
+
+                    DoSphereCam(false, WheelieCameraHeightOffset);
+                }
+                else {
+                    donutCameraLocked = false;
+
+                    if (carController.Speed >= 0f) {
+                        AngleX = 0f;
+                    }
+
+                    if (ForceRearView || (carController.Speed < -10f && carController.WheelsOffTheGround == 0)) {
+                        AngleX = 180f;
+                    }
+
+                    desiredYAngle = carController.FollowYAngle;
+                    DistanceCamTarget = carController.FollowDistance;
+
+                    bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
+                    if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
+                        TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
+                    }
+
+                    DoSphereCam(false, 0f);
+                }
+            }
                 break;
             case CameraMode.Side:
 			if (!(carController == null))
