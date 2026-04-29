@@ -353,12 +353,27 @@ public class CameraController : MonoBehaviour
                 if (carController != null) {
                     bool donutCam = LockCameraDuringDonut && IsDonutCameraActive();
                     bool recoverCam = LockCameraDuringRecover && IsRecoverCameraActive();
+
+                    // Nose wheelie now uses donut-camera behavior.
+                    bool noseWheelieCam =
+                        LockCameraDuringDonut &&
+                        carController.EnableNoseWheelieHold;
+
                     bool wheelieCam = LockCameraDuringWheelie && IsWheelieCameraActive();
 
-                    if (donutCam || recoverCam) {
+                    if (donutCam || recoverCam || noseWheelieCam) {
                         if (!donutCameraLocked) {
                             donutCameraLocked = true;
-                            donutLockedXAngle = CurrentXAngle;
+
+                            if (noseWheelieCam) {
+                                // Nose wheelie side view.
+                                // Use +90f for right side, -90f for left side.
+                                donutLockedXAngle = target.eulerAngles.y + 90f;
+                            }
+                            else {
+                                // Donut/recover keep current locked angle.
+                                donutLockedXAngle = CurrentXAngle;
+                            }
                         }
 
                         AngleX = 0f;
@@ -367,7 +382,11 @@ public class CameraController : MonoBehaviour
 
                         bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
                         if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
-                            TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
+                            TargetYAngle = Mathf.MoveTowards(
+                                TargetYAngle,
+                                desiredYAngle,
+                                Time.deltaTime * 50f
+                            );
                         }
 
                         DoSphereCam(true, 0f);
@@ -381,7 +400,11 @@ public class CameraController : MonoBehaviour
 
                         bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
                         if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
-                            TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
+                            TargetYAngle = Mathf.MoveTowards(
+                                TargetYAngle,
+                                desiredYAngle,
+                                Time.deltaTime * 50f
+                            );
                         }
 
                         DoSphereCam(false, WheelieCameraHeightOffset);
@@ -402,28 +425,18 @@ public class CameraController : MonoBehaviour
 
                         bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
                         if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag) {
-                            TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
+                            TargetYAngle = Mathf.MoveTowards(
+                                TargetYAngle,
+                                desiredYAngle,
+                                Time.deltaTime * 50f
+                            );
                         }
 
                         DoSphereCam(false, 0f);
                     }
                 }
                 break;
-            case CameraMode.Side:
-			if (!(carController == null))
-			{
-				AngleX = SideXAngle;
-				desiredYAngle = carController.FollowYAngle;
-				bool flag = Physics.CheckSphere(base.transform.position, 0.7f);
-				if (Mathf.Abs(TargetYAngle - desiredYAngle) > 3f && !flag)
-				{
-					TargetYAngle = Mathf.MoveTowards(TargetYAngle, desiredYAngle, Time.deltaTime * 50f);
-				}
-                DistanceCamTarget = carController.SideDistance;
-                DoSphereCam(false);
-            }
-			break;
-		case CameraMode.FirstPerson:
+            case CameraMode.FirstPerson:
 			if (!(carController == null))
 			{
 				base.transform.rotation = Quaternion.Lerp(base.transform.rotation, target.transform.rotation, FirstPersonDamping * Time.deltaTime);

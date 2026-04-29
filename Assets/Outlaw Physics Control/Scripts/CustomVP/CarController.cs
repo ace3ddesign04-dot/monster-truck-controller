@@ -10,6 +10,8 @@ namespace CustomVP {
         [Header("Stunt Events")]
         public UnityEvent OnWheelieEnter;
         public UnityEvent OnWheelieExit;
+        public UnityEvent OnNoseWheelieEnter;
+        public UnityEvent OnNoseWheelieExit;
         public UnityEvent OnSideWheelieEnter;
         public UnityEvent OnSideWheelieExit;
         public UnityEvent OnDonutEnter;
@@ -17,19 +19,48 @@ namespace CustomVP {
         public UnityEvent OnDonutRoundComplete;
         public UnityEvent OnSideSelfRightEnter;
         public UnityEvent OnSideSelfRightRecovered;
+        public UnityEvent OnAutoBackflipLanded;
 
         private bool wheelieEventPrevState = false;
+        private bool noseWheelieEventPrevState = false;
         private bool sideWheelieEventPrevState = false;
         private bool donutEventPrevState = false;
         private bool sideSelfRightEventPrevState = false;
+        private bool autoBackflipWasActive = false;
+        private bool autoBackflipLandingEventPending = false;
 
         private bool donutStateActive = false;
         private float donutAccumulatedYaw = 0f;
         private Vector3 donutPrevForwardFlat = Vector3.zero;
 
+        private void UpdateAutoBackflipLandingEvent() {
+            bool autoBackflipRunning = autoBackflipActive || autoBackflipLandingCatchActive;
+
+            // Backflip has started.
+            if (autoBackflipRunning) {
+                autoBackflipWasActive = true;
+                autoBackflipLandingEventPending = true;
+                return;
+            }
+
+            // Backflip finished, now wait until all tires are grounded.
+            if (autoBackflipWasActive && autoBackflipLandingEventPending) {
+                if (AllTiresGrounded()) {
+                    autoBackflipLandingEventPending = false;
+                    autoBackflipWasActive = false;
+                    OnAutoBackflipLanded.Invoke();
+                }
+            }
+
+            // Safety reset if stunt is over but truck is not landing properly for some reason.
+            if (!autoBackflipRunning && Grounded() && !autoBackflipLandingEventPending) {
+                autoBackflipWasActive = false;
+            }
+        }
         private void UpdateStuntEvents() {
-            // Wheelie
+            // Rear wheelie
             bool wheelieState = EnableWheelieHold;
+
             if (wheelieState && !wheelieEventPrevState)
                 OnWheelieEnter.Invoke();
             else if (!wheelieState && wheelieEventPrevState)
@@ -37,14 +68,31 @@ namespace CustomVP {
 
             wheelieEventPrevState = wheelieState;
 
+
+            // Nose wheelie
+            bool noseWheelieState = EnableNoseWheelieHold;
+
+            if (noseWheelieState && !noseWheelieEventPrevState)
+                OnNoseWheelieEnter.Invoke();
+            else if (!noseWheelieState && noseWheelieEventPrevState)
+                OnNoseWheelieExit.Invoke();
+
+            noseWheelieEventPrevState = noseWheelieState;
+
+
+            // Auto backflip
+            UpdateAutoBackflipLandingEvent();
+
             // Side wheelie
             bool sideWheelieState = sideWheelieCOMState != 0 || sideWheeliAssistEnabled;
+
             if (sideWheelieState && !sideWheelieEventPrevState)
                 OnSideWheelieEnter.Invoke();
             else if (!sideWheelieState && sideWheelieEventPrevState)
                 OnSideWheelieExit.Invoke();
 
             sideWheelieEventPrevState = sideWheelieState;
+
 
             // Donut
             bool donutState = donutStateActive;
@@ -63,11 +111,17 @@ namespace CustomVP {
 
             if (donutState) {
                 Vector3 currentFlatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+
                 if (currentFlatForward.sqrMagnitude > 0.0001f) {
                     currentFlatForward.Normalize();
 
                     if (donutPrevForwardFlat.sqrMagnitude > 0.0001f) {
-                        float deltaYaw = Vector3.SignedAngle(donutPrevForwardFlat, currentFlatForward, Vector3.up);
+                        float deltaYaw = Vector3.SignedAngle(
+                            donutPrevForwardFlat,
+                            currentFlatForward,
+                            Vector3.up
+                        );
+
                         donutAccumulatedYaw += deltaYaw;
 
                         while (Mathf.Abs(donutAccumulatedYaw) >= 360f) {
@@ -82,6 +136,7 @@ namespace CustomVP {
             }
             else if (!donutState && donutEventPrevState) {
                 OnDonutExit.Invoke();
+
                 donutAccumulatedYaw = 0f;
                 donutCompletedRounds = 0;
                 currentDonutTargetYawRate = DonutTargetYawRate;
@@ -90,13 +145,12 @@ namespace CustomVP {
 
             donutEventPrevState = donutState;
 
-            // Side self right
+
             // Side self right
             bool recoverState = sideSelfRightActive;
 
-            if (recoverState && !sideSelfRightEventPrevState) {
+            if (recoverState && !sideSelfRightEventPrevState)
                 OnSideSelfRightEnter.Invoke();
-            }
 
             sideSelfRightEventPrevState = recoverState;
         }
@@ -104,14 +158,689 @@ namespace CustomVP {
 
         public bool vehicleIsActive;
 
-        public Transform rearCOM;
+        #region Nose Wheeling
 
-        
+        [Header("Nose Wheelie Stable Pose Lock")]
+        public bool NoseWheelieUseStablePoseLock = true;
+
+        [Range(0f, 1f)]
+        public float NoseWheeliePoseLockStrength = 1f;
+        // 1 = fully locked like current behavior.
+        // 0 = no pose lock at all.
+        // 0.3 - 0.7 = assisted balance feel.
+
+        // How fast the body rotates into the target pose.
+        // Higher = snappier. Lower = smoother.
+        public float NoseWheeliePoseLockSpeed = 12f;
+
+        // How much angular velocity is removed while locked.
+        // 1 = remove all spin. 0.8 = remove most spin.
+        [Range(0f, 1f)]
+        public float NoseWheelieAngularVelocityKill = 0.92f;
+
+        // Race decreases from 90, brake increases beyond 90.
+        public float NoseWheelieRaceAngleDecrease = 14f;
+        public float NoseWheelieBrakeAngleIncrease = 12f;
+
+        // Smoothing speed for race/brake angle change.
+        public float NoseWheelieInputAngleResponse = 90f;
+
+        private Vector3 noseWheelieLockedRearDirection = Vector3.forward;
+
+        [Header("Nose Wheelie Dynamic Lock Strength")]
+        public bool NoseWheelieUseDynamicLockStrength = true;
+
+        // How low assistance can fall over time.
+        // 0 = can become fully manual/free.
+        // 0.25 = always keeps some assist.
+        [Range(0f, 1f)]
+        public float NoseWheelieMinDynamicLockStrength = 0.20f;
+
+        // Strength decrease per second when player gives no race/brake input.
+        public float NoseWheelieLockStrengthDecaySpeed = 0.18f;
+
+        // Strength increase per second while player gives race/brake input.
+        public float NoseWheelieLockStrengthRecoverSpeed = 0.65f;
+
+        // Minimum race/brake input required to count as active balancing input.
+        [Range(0f, 1f)]
+        public float NoseWheelieLockStrengthInputThreshold = 0.12f;
+
+        public float noseWheelieCachedInitialLockStrength = 1f;
+        public float noseWheelieRuntimeLockStrength = 1f;
+
+        [Header("Nose Wheelie Angle Exit")]
+        public bool NoseWheelieUseAngleExit = true;
+
+        // If actual nose-wheelie angle drops below this, exit and land.
+        public float NoseWheelieLandExitAngle = 65f;
+
+        // If actual nose-wheelie angle exceeds this, exit and allow front flip.
+        public float NoseWheelieFlipExitAngle = 100f;
+
+        // Delay before angle-exit starts checking.
+        // Needed so the entry transition does not instantly cancel.
+        public float NoseWheelieAngleExitStartDelay = 0.65f;
+
+        // Optional extra pitch kick when exiting toward flip.
+        // Keep 0 if you want pure physics.
+        public float NoseWheelieFlipExitPitchKick = 0f;
+
+        private float noseWheelieHoldTimer = 0f;
+
+        [Header("Nose Wheelie Re-Entry After Angle Exit")]
+        public bool NoseWheelieAllowAngleReEntry = true;
+
+        // How long after angle-exit the truck can re-enter nose-wheelie.
+        public float NoseWheelieAngleReEntryWindow = 1.25f;
+
+        // Extra padding inside the valid angle range.
+        // Example: with 3 degrees, re-entry happens only between 68 and 97,
+        // not exactly at 65 or 100.
+        public float NoseWheelieReEntryAnglePadding = 3f;
+
+        // If true, recovery is only possible while rear tires are still in air.
+        public bool NoseWheelieReEntryRequiresRearAir = true;
+
+        private bool noseWheelieAngleReEntryPending = false;
+        private float noseWheelieAngleReEntryTimer = 0f;
+
+        [Header("Nose Wheelie")]
+        public bool EnableNoseWheelieStunt = true;
+        public Transform noseWheelieCOM;
+
+        // Main angle control.
+        // 0.12 = small nose wheelie.
+        // 0.45 = high nose wheelie.
+        // 0.75 = very high.
+        // 0.90 = almost vertical.
+        // Do not use above 0.98.
+        [Range(10f, 90f)]
+        public float NoseWheelieHoldAngleDegrees = 90f;
+        // 90 = truck nose points straight toward ground.
+
+        [Header("Nose Wheelie Hard Vertical Lock")]
+        public bool NoseWheelieForceExactVertical = true;
+        public float NoseWheelieVerticalLockForce = 420f;
+        public float NoseWheelieVerticalLockDamping = 55f;
+        public float NoseWheelieVerticalLockMaxTorque = 520f;
+
+        [Header("Nose Wheelie Tire Balance Input")]
+        public bool NoseWheelieUseTireBalanceInput = true;
+
+        // How fast target angle changes from race/brake input.
+        public float NoseWheelieBalanceInputResponse = 90f;
+
+        // Extra pitch torque to make input feel tire-driven.
+        public float NoseWheelieTirePitchTorque = 45f;
+
+        // Damping for that input pitch torque.
+        public float NoseWheelieTirePitchDamping = 18f;
+
+        private float noseWheelieRuntimeTargetAngle = 90f;
+
+        public float NoseWheelieCOMLerpSpeed = 6f;
+        public float NoseWheelieCOMReturnSpeed = 2.5f;
+
+        [Range(0f, 1f)]
+        public float NoseWheelieHoldCOMBackToBase = 0.15f;
+
+        [Header("Nose Wheelie Entry")]
+        public float NoseWheelieEntryMinSpeed = 28f;
+        public float NoseWheelieLiftStartSpeed = 16f;
+        public float NoseWheelieBrakeThreshold = -0.2f;
+
+        [Header("Nose Wheelie Angle Speed")]
+        public float NoseWheelieAngleRaiseSpeed = 4f;
+        public float NoseWheelieAngleDropSpeed = 12f;
+
+        [Header("Nose Wheelie Assist")]
+        public float NoseWheeliePitchForce = 22f;
+        public float NoseWheeliePitchDamping = 6f;
+        public float NoseWheelieMaxPitchAssist = 22f;
+
+        public float NoseWheelieLiftPitchBoost = 10f;
+        public float NoseWheelieLiftPitchMaxBoost = 8f;
+
+        public float NoseWheelieRollForce = 8f;
+        public float NoseWheelieRollDamping = 4f;
+        public float NoseWheelieMaxRollAssist = 8f;
+
+        [Header("Nose Wheelie Steering")]
+        public float NoseWheelieSteerMultiplier = 1.35f;
+        public float NoseWheelieSteerReturnSpeed = 160f;
+        public float NoseWheelieSteerInputResponse = 8f;
+
+        public float NoseWheeliePivotYawForce = 18f;
+        public float NoseWheeliePivotYawDamping = 4f;
+        public float NoseWheelieTargetYawRate = 1.4f;
+        public float NoseWheelieMaxYawAssist = 8f;
+
+        public float NoseWheeliePivotSideForce = 14f;
+        public float NoseWheelieMaxPivotForce = 22f;
+
+        [Header("Nose Wheelie Drive")]
+        public float NoseWheelieFrontDriveMultiplier = 0f;
+        // Keep 0 if you do NOT want the truck to drive forward during nose-wheelie.
+        // Increase only if you want front wheels to pull during the stunt.
+
+        [Header("Nose Wheelie Lift Bias")]
+        public float NoseWheelieLiftFrontBrakeMultiplier = 1.4f;
+
+        [Range(0f, 1f)]
+        public float NoseWheelieLiftRearBrakeMultiplier = 0.05f;
+
+        [Range(0f, 1f)]
+        public float NoseWheelieLongitudinalAntirollMultiplier = 0.05f;
+
+        private bool noseWheeliePrimed = false;
+        private bool noseWheelieLiftActive = false;
+        public bool EnableNoseWheelieHold = false;
+
+        private float cachedNoseWheelieAngle = 0f;
+        private float currentNoseWheelieAngle = 0f;
+        private float noseWheelieSmoothedSteer = 0f;
+        private bool wasNoseWheelieActiveLastFrame = false;
+
+        private void ArmNoseWheelieAngleReEntry() {
+            if (!NoseWheelieAllowAngleReEntry) {
+                StopNoseWheelie();
+                return;
+            }
+
+            noseWheeliePrimed = false;
+            noseWheelieLiftActive = false;
+            EnableNoseWheelieHold = false;
+            cachedNoseWheelieAngle = 0f;
+            noseWheelieHoldTimer = 0f;
+
+            noseWheelieAngleReEntryPending = true;
+            noseWheelieAngleReEntryTimer = NoseWheelieAngleReEntryWindow;
+
+            // Keep the same facing/travel direction for re-entry.
+            if (noseWheelieLockedRearDirection.sqrMagnitude < 0.001f) {
+                noseWheelieLockedRearDirection = GetNoseWheelieFlatForwardDirection();
+            }
+
+            noseWheelieCachedInitialLockStrength = Mathf.Clamp01(NoseWheeliePoseLockStrength);
+            noseWheelieRuntimeLockStrength = noseWheelieCachedInitialLockStrength;
+        }
+
+        private void CancelNoseWheelieAngleReEntry() {
+            noseWheelieAngleReEntryPending = false;
+            noseWheelieAngleReEntryTimer = 0f;
+        }
+
+        private void ReactivateNoseWheelieFromAngleReEntry() {
+            EnableNoseWheelieHold = true;
+            noseWheeliePrimed = false;
+            noseWheelieLiftActive = false;
+            noseWheelieHoldTimer = 0f;
+
+            noseWheelieAngleReEntryPending = false;
+            noseWheelieAngleReEntryTimer = 0f;
+
+            noseWheelieCachedInitialLockStrength = Mathf.Clamp01(NoseWheeliePoseLockStrength);
+            noseWheelieRuntimeLockStrength = noseWheelieCachedInitialLockStrength;
+
+            noseWheelieRuntimeTargetAngle = Mathf.Clamp(
+                GetCurrentNoseWheelieAngleDegrees(),
+                NoseWheelieLandExitAngle + NoseWheelieReEntryAnglePadding,
+                NoseWheelieFlipExitAngle - NoseWheelieReEntryAnglePadding
+            );
+
+            cachedNoseWheelieAngle = Mathf.Abs(GetNoseWheelieTargetPitch());
+            currentNoseWheelieAngle = -cachedNoseWheelieAngle;
+        }
+
+        private bool CanReEnterNoseWheelieFromAngle() {
+            if (!noseWheelieAngleReEntryPending)
+                return false;
+
+            if (!FrontAxleGrounded())
+                return false;
+
+            if (NoseWheelieReEntryRequiresRearAir && RearAxleGrounded())
+                return false;
+
+            float actualAngle = GetCurrentNoseWheelieAngleDegrees();
+
+            float minAngle = NoseWheelieLandExitAngle + NoseWheelieReEntryAnglePadding;
+            float maxAngle = NoseWheelieFlipExitAngle - NoseWheelieReEntryAnglePadding;
+
+            return actualAngle >= minAngle && actualAngle <= maxAngle;
+        }
+
+        private void UpdateNoseWheelieDynamicLockStrength() {
+            if (!NoseWheelieUseDynamicLockStrength) {
+                noseWheelieRuntimeLockStrength = Mathf.Clamp01(NoseWheeliePoseLockStrength);
+                noseWheelieCachedInitialLockStrength = noseWheelieRuntimeLockStrength;
+                return;
+            }
+
+            float inputAmount = Mathf.Max(
+                Mathf.Clamp01(yInput),
+                Mathf.Clamp01(-yInput)
+            );
+
+            bool userBalancing =
+                inputAmount >= NoseWheelieLockStrengthInputThreshold;
+
+            float targetStrength = userBalancing
+                ? noseWheelieCachedInitialLockStrength
+                : NoseWheelieMinDynamicLockStrength;
+
+            float moveSpeed = userBalancing
+                ? NoseWheelieLockStrengthRecoverSpeed
+                : NoseWheelieLockStrengthDecaySpeed;
+
+            noseWheelieRuntimeLockStrength = Mathf.MoveTowards(
+                noseWheelieRuntimeLockStrength,
+                targetStrength,
+                Time.fixedDeltaTime * moveSpeed
+            );
+
+            noseWheelieRuntimeLockStrength = Mathf.Clamp(
+                noseWheelieRuntimeLockStrength,
+                NoseWheelieMinDynamicLockStrength,
+                noseWheelieCachedInitialLockStrength
+            );
+        }
+        private float GetCurrentNoseWheelieAngleDegrees() {
+            Vector3 rearDir = noseWheelieLockedRearDirection;
+
+            if (rearDir.sqrMagnitude < 0.001f) {
+                rearDir = GetNoseWheelieFlatForwardDirection();
+            }
+
+            rearDir = Vector3.ProjectOnPlane(rearDir, Vector3.up);
+
+            if (rearDir.sqrMagnitude < 0.001f)
+                rearDir = Vector3.ProjectOnPlane(transform.up, Vector3.up);
+
+            if (rearDir.sqrMagnitude < 0.001f)
+                return 0f;
+
+            rearDir.Normalize();
+
+            Vector3 fwd = transform.forward.normalized;
+
+            // Component toward original travel/rear direction.
+            float horizontalComponent = Vector3.Dot(fwd, rearDir);
+
+            // Component toward ground.
+            float downComponent = Vector3.Dot(fwd, Vector3.down);
+
+            // 0   = level
+            // 90  = nose straight down
+            // >90 = passed vertical / front-flip side
+            float angle = Mathf.Atan2(downComponent, horizontalComponent) * Mathf.Rad2Deg;
+
+            return angle;
+        }
+        private Vector3 GetNoseWheelieFlatForwardDirection() {
+            // Prefer actual movement direction if available.
+            Vector3 flatVelocity = Vector3.ProjectOnPlane(m_Rigidbody.velocity, Vector3.up);
+
+            if (flatVelocity.sqrMagnitude > 0.25f) {
+                return flatVelocity.normalized;
+            }
+
+            // Fallback to truck forward direction.
+            Vector3 flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+
+            if (flatForward.sqrMagnitude > 0.001f) {
+                return flatForward.normalized;
+            }
+
+            return transform.forward;
+        }
+        private float GetNoseWheelieTargetPitch() {
+            float baseAngle = Mathf.Clamp(NoseWheelieHoldAngleDegrees, 10f, 90f);
+            float targetAngle = baseAngle;
+
+            if (EnableNoseWheelieHold && NoseWheelieUseTireBalanceInput) {
+                float race01 = Mathf.Clamp01(yInput);
+                float brake01 = Mathf.Clamp01(-yInput);
+
+                targetAngle =
+                    baseAngle
+                    - race01 * NoseWheelieRaceAngleDecrease
+                    + brake01 * NoseWheelieBrakeAngleIncrease;
+
+                targetAngle = Mathf.Clamp(targetAngle, 55f, 110f);
+            }
+
+            noseWheelieRuntimeTargetAngle = Mathf.MoveTowards(
+                noseWheelieRuntimeTargetAngle,
+                targetAngle,
+                Time.fixedDeltaTime * NoseWheelieBalanceInputResponse
+            );
+
+            // Dot pitch still only needs -sin(angle).
+            // For angles above 90, sin starts reducing again, so this is only used
+            // for cached/display angle. Actual rotation is handled in ForceNoseWheelieVerticalPose().
+            return -Mathf.Sin(Mathf.Clamp(noseWheelieRuntimeTargetAngle, 10f, 90f) * Mathf.Deg2Rad);
+        }
+        private bool IsOtherStuntBlockingNoseWheelie() {
+            bool donutTryingOrActive =
+                donutStuntActive &&
+                Mathf.Abs(xInput) > 0.9f &&
+                Mathf.Abs(yInput) > 0.9f &&
+                !sideWheeliAssistEnabled;
+
+            bool sideWheelieActive =
+                sideWheelieCOMState != 0 ||
+                sideWheeliAssistEnabled;
+
+            return
+                EnableWheelieHold ||
+                sideSelfRightActive ||
+                upsideDownRollActive ||
+                autoBackflipActive ||
+                autoBackflipLandingCatchActive ||
+                donutTryingOrActive ||
+                sideWheelieActive;
+        }
+
+        private void StopNoseWheelie() {
+            noseWheeliePrimed = false;
+            noseWheelieLiftActive = false;
+            EnableNoseWheelieHold = false;
+            cachedNoseWheelieAngle = 0f;
+            noseWheelieHoldTimer = 0f;
+
+            CancelNoseWheelieAngleReEntry();
+
+            noseWheelieCachedInitialLockStrength = Mathf.Clamp01(NoseWheeliePoseLockStrength);
+            noseWheelieRuntimeLockStrength = noseWheelieCachedInitialLockStrength;
+        }
+        private void ForceNoseWheelieVerticalPose() {
+            if (!NoseWheelieUseStablePoseLock) {
+                return;
+            }
+
+            float baseAngle = Mathf.Clamp(NoseWheelieHoldAngleDegrees, 10f, 90f);
+
+            float race01 = Mathf.Clamp01(yInput);
+            float brake01 = Mathf.Clamp01(-yInput);
+
+            float targetAngle =
+                baseAngle
+                - race01 * NoseWheelieRaceAngleDecrease
+                + brake01 * NoseWheelieBrakeAngleIncrease;
+
+            targetAngle = Mathf.Clamp(targetAngle, 60f, 108f);
+
+            noseWheelieRuntimeTargetAngle = Mathf.MoveTowards(
+                noseWheelieRuntimeTargetAngle,
+                targetAngle,
+                Time.fixedDeltaTime * NoseWheelieInputAngleResponse
+            );
+
+            float rad = noseWheelieRuntimeTargetAngle * Mathf.Deg2Rad;
+
+            Vector3 rearDir = noseWheelieLockedRearDirection;
+
+            if (rearDir.sqrMagnitude < 0.001f) {
+                rearDir = Vector3.ProjectOnPlane(transform.up, Vector3.up);
+
+                if (rearDir.sqrMagnitude < 0.001f)
+                    rearDir = transform.forward;
+
+                rearDir.Normalize();
+                noseWheelieLockedRearDirection = rearDir;
+            }
+
+            // 90 degrees = nose straight down.
+            // Less than 90 = landing side.
+            // More than 90 = flip side.
+            Vector3 targetForward =
+                rearDir * Mathf.Cos(rad) +
+                Vector3.down * Mathf.Sin(rad);
+
+            targetForward.Normalize();
+
+            Vector3 targetUp = rearDir * Mathf.Sin(rad) + Vector3.up * Mathf.Cos(rad);
+
+            targetUp = Vector3.ProjectOnPlane(targetUp, targetForward);
+
+            if (targetUp.sqrMagnitude < 0.001f)
+                targetUp = Vector3.ProjectOnPlane(transform.up, targetForward);
+
+            if (targetUp.sqrMagnitude < 0.001f)
+                targetUp = Vector3.forward;
+
+            targetUp.Normalize();
+
+            Quaternion targetRotation = Quaternion.LookRotation(targetForward, targetUp);
+
+            UpdateNoseWheelieDynamicLockStrength();
+
+            float lockStrength = NoseWheelieUseDynamicLockStrength
+                ? Mathf.Clamp01(noseWheelieRuntimeLockStrength)
+                : Mathf.Clamp01(NoseWheeliePoseLockStrength);
+
+            if (lockStrength <= 0.001f)
+                return;
+
+            // Pose lock strength affects how tightly the truck follows the target angle.
+            float poseT =
+                Time.fixedDeltaTime *
+                NoseWheeliePoseLockSpeed *
+                lockStrength;
+
+            Quaternion newRotation = Quaternion.Slerp(
+                m_Rigidbody.rotation,
+                targetRotation,
+                poseT
+            );
+
+            m_Rigidbody.MoveRotation(newRotation);
+
+            // Angular velocity kill also scales with lock strength.
+            // At 1 = stable hard lock.
+            // At 0 = physics is free.
+            float angularKill =
+                NoseWheelieAngularVelocityKill *
+                lockStrength;
+
+            m_Rigidbody.angularVelocity = Vector3.Lerp(
+                m_Rigidbody.angularVelocity,
+                Vector3.zero,
+                angularKill
+            );
+        }
+
+        private void UpdateNoseWheelieState() {
+            if (!EnableNoseWheelieStunt || noseWheelieCOM == null) {
+                StopNoseWheelie();
+
+                cachedNoseWheelieAngle = Mathf.Abs(GetNoseWheelieTargetPitch());
+
+                return;
+            }
+
+            bool brakePressed = yInput <= NoseWheelieBrakeThreshold;
+
+            // IMPORTANT:
+            // Once nose-wheelie has entered, do NOT exit.
+            // No speed check, no throttle check, no rear-wheel check.
+            if (EnableNoseWheelieHold) {
+                noseWheeliePrimed = false;
+                noseWheelieHoldTimer += Time.fixedDeltaTime;
+
+                float actualAngle = GetCurrentNoseWheelieAngleDegrees();
+
+                if (NoseWheelieUseAngleExit &&
+                    noseWheelieHoldTimer >= NoseWheelieAngleExitStartDelay) {
+
+                    // Too low: temporarily release pose lock.
+                    // If user brings it back while rear tires are still in air,
+                    // nose-wheelie can re-enter.
+                    if (actualAngle < NoseWheelieLandExitAngle) {
+                        ArmNoseWheelieAngleReEntry();
+                        return;
+                    }
+
+                    // Too far forward: temporarily release pose lock.
+                    // If user saves it with race input and angle returns,
+                    // nose-wheelie can re-enter.
+                    if (actualAngle > NoseWheelieFlipExitAngle) {
+                        ArmNoseWheelieAngleReEntry();
+
+                        if (NoseWheelieFlipExitPitchKick > 0f) {
+                            m_Rigidbody.AddRelativeTorque(
+                                NoseWheelieFlipExitPitchKick,
+                                0f,
+                                0f,
+                                ForceMode.Acceleration
+                            );
+                        }
+
+                        return;
+                    }
+                }
+
+                float targetPitch = GetNoseWheelieTargetPitch();
+                cachedNoseWheelieAngle = Mathf.Abs(targetPitch);
+
+                currentNoseWheelieAngle = Mathf.MoveTowards(
+                    currentNoseWheelieAngle,
+                    targetPitch,
+                    Time.fixedDeltaTime * NoseWheelieAngleRaiseSpeed
+                );
+
+                return;
+            }
+
+            // Angle-exit recovery:
+            // If the player saves the angle before rear tires land,
+            // re-enter nose-wheelie without requiring the original brake/speed entry.
+            if (noseWheelieAngleReEntryPending) {
+                noseWheelieAngleReEntryTimer -= Time.fixedDeltaTime;
+
+                bool rearLanded =
+                    NoseWheelieReEntryRequiresRearAir &&
+                    RearAxleGrounded();
+
+                if (noseWheelieAngleReEntryTimer <= 0f || rearLanded) {
+                    CancelNoseWheelieAngleReEntry();
+                }
+                else if (CanReEnterNoseWheelieFromAngle()) {
+                    ReactivateNoseWheelieFromAngleReEntry();
+                    return;
+                }
+            }
+
+            // Do not start nose-wheelie while another stunt is already active.
+            // This only blocks entry. It does NOT exit once nose-wheelie is active.
+            if (IsOtherStuntBlockingNoseWheelie()) {
+                noseWheeliePrimed = false;
+                noseWheelieLiftActive = false;
+
+                cachedNoseWheelieAngle = Mathf.Abs(GetNoseWheelieTargetPitch());
+
+                return;
+            }
+
+            // Step 1: prime when braking from enough speed.
+            if (!noseWheeliePrimed && Grounded() && Speed >= NoseWheelieEntryMinSpeed && brakePressed) {
+                noseWheeliePrimed = true;
+
+                cachedNoseWheelieAngle = Mathf.Abs(GetNoseWheelieTargetPitch());
+            }
+
+            // If player releases brake before lift starts, cancel prime.
+            if (noseWheeliePrimed && !brakePressed) {
+                noseWheeliePrimed = false;
+            }
+
+            // Step 2: enter nose-wheelie when braking slows truck to lift-start speed.
+            if (noseWheeliePrimed &&
+                brakePressed &&
+                Speed <= NoseWheelieLiftStartSpeed &&
+                FrontAxleGrounded()) {
+
+                EnableNoseWheelieHold = true;
+                noseWheelieLiftActive = false;
+                noseWheeliePrimed = false;
+                noseWheelieHoldTimer = 0f;
+                noseWheelieCachedInitialLockStrength = Mathf.Clamp01(NoseWheeliePoseLockStrength);
+                noseWheelieRuntimeLockStrength = noseWheelieCachedInitialLockStrength;
+
+                noseWheelieRuntimeTargetAngle = NoseWheelieHoldAngleDegrees;
+
+                // Lock the truck's original travel/facing direction once.
+                // At 90° nose-wheelie, transform.forward points down,
+                // and transform.up should point in this locked direction.
+                // This prevents the body from spinning 180° around Z.
+                noseWheelieLockedRearDirection = GetNoseWheelieFlatForwardDirection();
+
+                noseWheelieRuntimeTargetAngle = NoseWheelieHoldAngleDegrees;
+
+                cachedNoseWheelieAngle = Mathf.Abs(GetNoseWheelieTargetPitch());
+
+                currentNoseWheelieAngle = Mathf.MoveTowards(
+                    currentNoseWheelieAngle,
+                    -cachedNoseWheelieAngle,
+                    Time.fixedDeltaTime * NoseWheelieAngleRaiseSpeed
+                );
+
+                return;
+            }
+
+            // Not active yet.
+            currentNoseWheelieAngle = Mathf.MoveTowards(
+                currentNoseWheelieAngle,
+                0f,
+                Time.fixedDeltaTime * NoseWheelieAngleDropSpeed
+            );
+        }
+
+        private void DoNoseWheelieAssist() {
+            bool noseWheelieActive = EnableNoseWheelieHold;
+
+            if (!noseWheelieActive || noseWheelieCOM == null) {
+                noseWheelieSmoothedSteer = Mathf.MoveTowards(
+                    noseWheelieSmoothedSteer,
+                    0f,
+                    Time.fixedDeltaTime * NoseWheelieSteerInputResponse
+                );
+                return;
+            }
+
+            float targetPitch = GetNoseWheelieTargetPitch();
+            cachedNoseWheelieAngle = Mathf.Abs(targetPitch);
+
+            currentNoseWheelieAngle = Mathf.MoveTowards(
+                currentNoseWheelieAngle,
+                targetPitch,
+                Time.fixedDeltaTime * NoseWheelieAngleRaiseSpeed
+            );
+
+            // Stable pose lock handles the 90-degree balance.
+            ForceNoseWheelieVerticalPose();
+
+            // Keep steering input smoothing for wheel visual steer only.
+            float targetSteerInput = Mathf.Clamp(xInput, -1f, 1f);
+
+            noseWheelieSmoothedSteer = Mathf.MoveTowards(
+                noseWheelieSmoothedSteer,
+                targetSteerInput,
+                Time.fixedDeltaTime * NoseWheelieSteerInputResponse
+            );
+        }
+
+        #endregion
+
+        #region Rear Wheeling
+
         [Header("Wheelie Drive")]
+        public Transform rearCOM;
         [Range(0f, 1f)] public float WheelieFrontDriveMultiplier = 0f;
         public float WheelieRearDriveMultiplier = 2.2f;
 
-        #region Rear Wheeling
         [Header("Wheelie Hold")]
         public bool EnableWheelieStunt = true;
         public bool EnableWheelieHold = false;
@@ -267,6 +996,18 @@ namespace CustomVP {
         private bool RearAxleGrounded() {
             return wheels.Count >= 4 && (wheels[2].wc.IsGrounded || wheels[3].wc.IsGrounded);
         }
+        private bool AllTiresGrounded() {
+            if (wheels == null || wheels.Count == 0)
+                return false;
+
+            for (int i = 0; i < wheels.Count; i++) {
+                if (wheels[i].wc == null || !wheels[i].wc.IsGrounded)
+                    return false;
+            }
+
+            return true;
+        }
+
         private bool IsOtherStuntBlockingWheelie() {
             bool donutTryingOrActive =
                 donutStuntActive &&
@@ -284,7 +1025,8 @@ namespace CustomVP {
                 autoBackflipActive ||
                 autoBackflipLandingCatchActive ||
                 donutTryingOrActive ||
-                sideWheelieActive;
+                sideWheelieActive ||
+                EnableNoseWheelieHold;
         }
         #endregion
 
@@ -1225,16 +1967,45 @@ namespace CustomVP {
             if (comBase != null)
                 manualCenterOfMass = comBase.localPosition;
 
-            // hard snap to rear COM while wheelie hold is enabled
             if (EnableWheelieStunt && EnableWheelieHold && rearCOM != null) {
                 SetCOM(rearCOM.localPosition);
+                return;
+            }
+
+            if (EnableNoseWheelieStunt && EnableNoseWheelieHold && noseWheelieCOM != null) {
+                Vector3 baseCOM = (comBase != null) ? comBase.localPosition : manualCenterOfMass;
+
+                Vector3 targetNoseCOM = Vector3.Lerp(
+                    noseWheelieCOM.localPosition,
+                    baseCOM,
+                    NoseWheelieHoldCOMBackToBase
+                );
+
+                SetCOM(Vector3.Lerp(
+                    m_Rigidbody.centerOfMass,
+                    targetNoseCOM,
+                    Time.fixedDeltaTime * NoseWheelieCOMLerpSpeed
+                ));
+
+                wasNoseWheelieActiveLastFrame = true;
                 return;
             }
 
             UpdateSideWheelieCOMState();
 
             Vector3 targetCOM = GetTargetCenterOfMass();
-            SetCOM(Vector3.Lerp(m_Rigidbody.centerOfMass, targetCOM, Time.fixedDeltaTime * 8f));
+
+            float returnSpeed = wasNoseWheelieActiveLastFrame
+                ? NoseWheelieCOMReturnSpeed
+                : 8f;
+
+            SetCOM(Vector3.Lerp(
+                m_Rigidbody.centerOfMass,
+                targetCOM,
+                Time.fixedDeltaTime * returnSpeed
+            ));
+
+            wasNoseWheelieActiveLastFrame = false;
         }
 
         private void DoSideWheelieAssist() {
@@ -1590,6 +2361,9 @@ namespace CustomVP {
             OnDonutRoundComplete.AddListener(() => { print("Stunt: -=> Donut Round Completed"); });
             OnSideSelfRightEnter.AddListener(() => { print("Stunt: -=> side self right entered"); });
             OnSideSelfRightRecovered.AddListener(() => { print("Stunt: -=> Side self recovered"); });
+            OnNoseWheelieEnter.AddListener(() => { print("Stunt: -=> Nose Wheelie Entered"); });
+            OnNoseWheelieExit.AddListener(() => { print("Stunt: -=> Nose Wheelie Exit"); });
+            OnAutoBackflipLanded.AddListener(() => { print("Stunt: -=> Auto Backflip Landed On All Tires"); });
 
             if (comBase != null) {
                 manualCenterOfMass = comBase.localPosition;
@@ -1785,8 +2559,10 @@ namespace CustomVP {
                 GetDataFromSurfaceManager();
             }
 
+            UpdateNoseWheelieState();
             DoCarHandling();
             DoWheelieHoldAssist();
+            DoNoseWheelieAssist();
 
             if (IsBodyTouchingWithoutWheels()) {
                 StopAutoBackflip();
@@ -2134,6 +2910,10 @@ namespace CustomVP {
             float effectiveRearLateralAntiroll = RearLateralAntiroll;
             float effectiveLongitudinalAntiroll = LongitudinalAntiroll;
 
+            if (EnableNoseWheelieHold) {
+                effectiveLongitudinalAntiroll *= NoseWheelieLongitudinalAntirollMultiplier;
+            }
+
             if (sideSelfRightActive) {
                 if (sideSelfRightTimer < SideSelfRightPitchPhaseDuration)
                     return;
@@ -2145,35 +2925,73 @@ namespace CustomVP {
 
             float frontLeftCompression = wheels[0].wc.IsGrounded ? wheels[0].wc.Compression : 0f;
             float frontRightCompression = wheels[1].wc.IsGrounded ? wheels[1].wc.Compression : 0f;
-            float frontAntirollForce = (frontLeftCompression - frontRightCompression) * effectiveFrontLateralAntiroll;
 
-            if (wheels[0].wc.IsGrounded)
-                m_Rigidbody.AddForceAtPosition(wheels[0].wc.transform.up * frontAntirollForce, wheels[0].wc.transform.position);
+            float frontAntirollForce =
+                (frontLeftCompression - frontRightCompression) *
+                effectiveFrontLateralAntiroll;
 
-            if (wheels[1].wc.IsGrounded)
-                m_Rigidbody.AddForceAtPosition(wheels[1].wc.transform.up * -frontAntirollForce, wheels[1].wc.transform.position);
+            if (wheels[0].wc.IsGrounded) {
+                m_Rigidbody.AddForceAtPosition(
+                    wheels[0].wc.transform.up * frontAntirollForce,
+                    wheels[0].wc.transform.position
+                );
+            }
+
+            if (wheels[1].wc.IsGrounded) {
+                m_Rigidbody.AddForceAtPosition(
+                    wheels[1].wc.transform.up * -frontAntirollForce,
+                    wheels[1].wc.transform.position
+                );
+            }
 
             float rearLeftCompression = wheels[2].wc.IsGrounded ? wheels[2].wc.Compression : 0f;
             float rearRightCompression = wheels[3].wc.IsGrounded ? wheels[3].wc.Compression : 0f;
-            float rearAntirollForce = (rearLeftCompression - rearRightCompression) * effectiveRearLateralAntiroll;
 
-            if (wheels[2].wc.IsGrounded)
-                m_Rigidbody.AddForceAtPosition(wheels[2].wc.transform.up * rearAntirollForce, wheels[2].wc.transform.position);
+            float rearAntirollForce =
+                (rearLeftCompression - rearRightCompression) *
+                effectiveRearLateralAntiroll;
 
-            if (wheels[3].wc.IsGrounded)
-                m_Rigidbody.AddForceAtPosition(wheels[3].wc.transform.up * -rearAntirollForce, wheels[3].wc.transform.position);
+            if (wheels[2].wc.IsGrounded) {
+                m_Rigidbody.AddForceAtPosition(
+                    wheels[2].wc.transform.up * rearAntirollForce,
+                    wheels[2].wc.transform.position
+                );
+            }
 
-            float frontAvgCompression = (frontLeftCompression + frontRightCompression) * 0.5f;
-            float rearAvgCompression = (rearLeftCompression + rearRightCompression) * 0.5f;
-            float longitudinalAntirollForce = (frontAvgCompression - rearAvgCompression) * effectiveLongitudinalAntiroll;
+            if (wheels[3].wc.IsGrounded) {
+                m_Rigidbody.AddForceAtPosition(
+                    wheels[3].wc.transform.up * -rearAntirollForce,
+                    wheels[3].wc.transform.position
+                );
+            }
 
-            Vector3 frontAxleCenter = (wheels[0].wc.transform.position + wheels[1].wc.transform.position) * 0.5f;
-            Vector3 rearAxleCenter = (wheels[2].wc.transform.position + wheels[3].wc.transform.position) * 0.5f;
+            float frontAvgCompression =
+                (frontLeftCompression + frontRightCompression) * 0.5f;
+
+            float rearAvgCompression =
+                (rearLeftCompression + rearRightCompression) * 0.5f;
+
+            float longitudinalAntirollForce =
+                (frontAvgCompression - rearAvgCompression) *
+                effectiveLongitudinalAntiroll;
+
+            Vector3 frontAxleCenter =
+                (wheels[0].wc.transform.position + wheels[1].wc.transform.position) * 0.5f;
+
+            Vector3 rearAxleCenter =
+                (wheels[2].wc.transform.position + wheels[3].wc.transform.position) * 0.5f;
 
             float uprightFactor = Mathf.InverseLerp(0.75f, 1f, transform.up.y);
 
-            m_Rigidbody.AddForceAtPosition(transform.up * longitudinalAntirollForce * uprightFactor, frontAxleCenter);
-            m_Rigidbody.AddForceAtPosition(-transform.up * longitudinalAntirollForce * uprightFactor, rearAxleCenter);
+            m_Rigidbody.AddForceAtPosition(
+                transform.up * longitudinalAntirollForce * uprightFactor,
+                frontAxleCenter
+            );
+
+            m_Rigidbody.AddForceAtPosition(
+                -transform.up * longitudinalAntirollForce * uprightFactor,
+                rearAxleCenter
+            );
         }
 
         private int NotGroundedWheels() {
@@ -2629,35 +3447,40 @@ namespace CustomVP {
                 Speed <= -ReverseSnapMinReverseSpeed &&
                 yInput >= 0.95f;
 
-            float target = 0f;
+            float targetBrake = 0f;
+
             if (!abruptReverseToForward && (Speed > 1f || transmissionType == TransmissionType.Manual)) {
-                target = -Mathf.Clamp(yInput, -1f, 0f);
+                targetBrake = -Mathf.Clamp(yInput, -1f, 0f);
             }
 
             Braking = abruptReverseToForward
                 ? 0f
-                : Mathf.MoveTowards(Braking, target, Time.fixedDeltaTime * 50f);
+                : Mathf.MoveTowards(Braking, targetBrake, Time.fixedDeltaTime * 50f);
 
             Braking = Mathf.Max(Braking, ExtremeBraking);
 
-            float num = abruptReverseToForward ? 1f : yInput;
+            float throttleInput = abruptReverseToForward ? 1f : yInput;
 
-            if (!abruptReverseToForward && ((Speed > 1f && Grounded()) || transmissionType == TransmissionType.Manual)) {
-                num = Mathf.Clamp(yInput, 0f, 1f);
+            if (!abruptReverseToForward &&
+                ((Speed > 1f && Grounded()) || transmissionType == TransmissionType.Manual)) {
+                throttleInput = Mathf.Clamp(yInput, 0f, 1f);
             }
 
             if (transmissionType == TransmissionType.Manual && engine.ReverseGear) {
-                num = -num;
+                throttleInput = -throttleInput;
             }
 
-            Throttle = num;
+            Throttle = throttleInput;
 
             if (abruptReverseToForward) {
                 Vector3 localVel = transform.InverseTransformDirection(m_Rigidbody.velocity);
                 localVel.z = Mathf.Max(localVel.z, ReverseSnapForwardBoostSpeed / 2.23f);
                 m_Rigidbody.velocity = transform.TransformDirection(localVel);
 
-                m_Rigidbody.AddForce(transform.forward * ReverseSnapForwardAssist, ForceMode.Acceleration);
+                m_Rigidbody.AddForce(
+                    transform.forward * ReverseSnapForwardAssist,
+                    ForceMode.Acceleration
+                );
 
                 if (!reverseSnapWasTriggering) {
                     EnableWheelieHold = true;
@@ -2670,16 +3493,25 @@ namespace CustomVP {
 
             reverseSnapWasTriggering = abruptReverseToForward;
 
-            float leveledMaxSpeed = LeveledMaxSpeed;
+            float leveledMaxSpeed = Mathf.Max(1f, LeveledMaxSpeed);
+
             float rPM = engine.RPM;
             float maxRpm = engine.maxRpm;
-            float num2 = engine.Gears[engine.Gear];
+            float gearRatio = engine.Gears[engine.Gear];
             float topGear = engine.TopGear;
-            float num3 = (!LowGear) ? 1f : LowGearRatio;
-            //float num4 = Mathf.Clamp01(1f - Speed / leveledMaxSpeed) / 2f;
-            float num4 = Mathf.Clamp01(1f - Speed / leveledMaxSpeed);
-            float num5 = (FWD && RWD) ? 1 : 2;
-            CurrentTorque = LeveledMaxTorque * DynoCurve.Evaluate(rPM / maxRpm) * num2 * topGear * num3 * num4 * num5;
+            float lowGearMul = (!LowGear) ? 1f : LowGearRatio;
+            float speedFactor = Mathf.Clamp01(1f - Mathf.Abs(Speed) / leveledMaxSpeed);
+            float driveMul = (FWD && RWD) ? 1f : 2f;
+
+            CurrentTorque =
+                LeveledMaxTorque *
+                DynoCurve.Evaluate(rPM / maxRpm) *
+                gearRatio *
+                topGear *
+                lowGearMul *
+                speedFactor *
+                driveMul;
+
             if (float.IsNaN(CurrentTorque)) {
                 CurrentTorque = 0f;
             }
@@ -2688,33 +3520,79 @@ namespace CustomVP {
                 CurrentTorque = 0f;
             }
 
-            float target2 = Mathf.Lerp(maxSteeringAngle * 0.1f * xInput, maxSteeringAngle * xInput,
-                1f - Speed / leveledMaxSpeed * SteerLimitOnSpeed);
-            Steering = Mathf.MoveTowards(Steering, target2, Time.fixedDeltaTime * 100f);
-
-            float rearSteerT = Mathf.Clamp01(Mathf.Abs(Speed) / RearSteerFadeOutSpeed);
-            InverseSteerMultiplier = EnableRearSteer ? Mathf.Lerp(RearSteerLowSpeedMultiplier, RearSteerHighSpeedMultiplier, rearSteerT) : 0f;
-
-            if (EnableWheelieHold && RearAxleGrounded() && !FrontAxleGrounded()) {
-                InverseSteerMultiplier = Mathf.Max(InverseSteerMultiplier, WheelieRearSteerMultiplier);
-            }
-
-            if (SteeringWheel != null) {
-                SteeringWheel.localEulerAngles = new Vector3(0f, 0f,
-                    Mathf.LerpUnclamped(SteeringWheelMaxAngle, 0f, Steering / maxSteeringAngle + 1f));
-            }
-
             if (engine != null && engine.NeutralGear) {
                 CurrentTorque = 0f;
             }
 
+            bool wheelieUseNormalRearSteer =
+                EnableWheelieHold &&
+                RearAxleGrounded() &&
+                !FrontAxleGrounded();
+
+            bool noseWheelieActive =
+                EnableNoseWheelieHold &&
+                FrontAxleGrounded();
+
+            float speed01 = Mathf.Clamp01(Mathf.Abs(Speed) / leveledMaxSpeed);
+            float steerLimitT = Mathf.Clamp01(1f - speed01 * SteerLimitOnSpeed);
+
+            float targetSteering = Mathf.Lerp(
+                maxSteeringAngle * 0.1f * xInput,
+                maxSteeringAngle * xInput,
+                steerLimitT
+            );
+
+            float steeringMoveSpeed = noseWheelieActive
+                ? NoseWheelieSteerReturnSpeed
+                : 100f;
+
+            Steering = Mathf.MoveTowards(
+                Steering,
+                targetSteering,
+                Time.fixedDeltaTime * steeringMoveSpeed
+            );
+
+            float appliedSteering = Steering;
+
+            if (noseWheelieActive) {
+                appliedSteering = Mathf.Clamp(
+                    Steering * NoseWheelieSteerMultiplier,
+                    -maxSteeringAngle,
+                    maxSteeringAngle
+                );
+            }
+
+            float rearSteerT = Mathf.Clamp01(Mathf.Abs(Speed) / RearSteerFadeOutSpeed);
+
+            InverseSteerMultiplier = EnableRearSteer
+                ? Mathf.Lerp(RearSteerLowSpeedMultiplier, RearSteerHighSpeedMultiplier, rearSteerT)
+                : 0f;
+
+            if (wheelieUseNormalRearSteer) {
+                InverseSteerMultiplier = Mathf.Max(
+                    InverseSteerMultiplier,
+                    WheelieRearSteerMultiplier
+                );
+            }
+
+            if (SteeringWheel != null) {
+                SteeringWheel.localEulerAngles = new Vector3(
+                    0f,
+                    0f,
+                    Mathf.LerpUnclamped(
+                        SteeringWheelMaxAngle,
+                        0f,
+                        appliedSteering / maxSteeringAngle + 1f
+                    )
+                );
+            }
+
             currentBrakeTorque = BrakeTorque * Braking;
-            bool wheelieUseNormalRearSteer = EnableWheelieHold && RearAxleGrounded() && !FrontAxleGrounded();
 
             for (int i = 0; i < wheels.Count; i++) {
                 _Wheel wheel = wheels[i];
 
-                if (wheel.wc.wheelCollider == null) {
+                if (wheel.wc == null || wheel.wc.wheelCollider == null) {
                     break;
                 }
 
@@ -2722,12 +3600,25 @@ namespace CustomVP {
                     SetupCounterWheels();
                 }
 
-                float motorTorque = (!wheel.power) ? 0f : (CurrentTorque * Throttle);
+                bool isFrontWheel = i <= 1;
+                bool isRearWheel = i >= 2;
 
-                if (wheelieUseNormalRearSteer) {
-                    bool isFrontWheel = (i <= 1);
-                    bool isRearWheel = (i >= 2);
+                float motorTorque = (!wheel.power) ? 0f : CurrentTorque * Throttle;
+                float brakeTorque = currentBrakeTorque;
 
+                // -------------------------
+                // Nose wheelie drive
+                // -------------------------
+                if (noseWheelieActive) {
+                    if (isFrontWheel) {
+                        // Keep this 0 if you do not want forward drive.
+                        motorTorque *= NoseWheelieFrontDriveMultiplier;
+                    }
+                    else if (isRearWheel) {
+                        motorTorque = 0f;
+                    }
+                }
+                else if (wheelieUseNormalRearSteer) {
                     if (isFrontWheel) {
                         motorTorque *= WheelieFrontDriveMultiplier;
                     }
@@ -2736,29 +3627,67 @@ namespace CustomVP {
                     }
                 }
 
-                wheel.wc.MotorTorque = motorTorque;
+                // -------------------------
+                // Steering
+                // -------------------------
+                wheel.wc.Steer = 0f;
 
-                if (wheel.steer) {
-                    wheel.wc.Steer = Steering;
-                }
-
-                if (wheel.inverseSteer) {
-                    if (wheelieUseNormalRearSteer) {
-                        wheel.wc.Steer = Steering;
+                if (noseWheelieActive) {
+                    if (isFrontWheel && wheel.steer) {
+                        wheel.wc.Steer = appliedSteering;
                     }
                     else {
-                        wheel.wc.Steer = (0f - Steering) * InverseSteerMultiplier;
+                        wheel.wc.Steer = 0f;
+                    }
+                }
+                else {
+                    if (wheel.steer) {
+                        wheel.wc.Steer = appliedSteering;
+                    }
+
+                    if (wheel.inverseSteer) {
+                        if (wheelieUseNormalRearSteer) {
+                            wheel.wc.Steer = appliedSteering;
+                        }
+                        else {
+                            wheel.wc.Steer =
+                                -appliedSteering *
+                                InverseSteerMultiplier;
+                        }
                     }
                 }
 
-                wheel.wc.BrakeTorque = currentBrakeTorque;
-                if (wheel.handbrake) {
-                    wheel.wc.BrakeTorque = BrakeTorque * Mathf.Max(Handbraking * 3f, Braking);
+                // -------------------------
+                // Brake
+                // -------------------------
+                if (noseWheelieActive) {
+                    if (isFrontWheel) {
+                        // Keep wheel visual response, but do not let brakes fight the pose lock.
+                        brakeTorque = 0f;
+                    }
+                    else if (isRearWheel) {
+                        motorTorque = 0f;
+                        brakeTorque = 0f;
+                    }
                 }
 
-                if (CurrentTorque * Throttle == 0f && Braking == 0f && Handbraking == 0f && ExtremeBraking == 0f) {
-                    wheel.wc.BrakeTorque = BrakeTorque / 2f * RollingResistance;
+                if (wheel.handbrake) {
+                    brakeTorque =
+                        BrakeTorque *
+                        Mathf.Max(Handbraking * 3f, Braking);
                 }
+
+                if (CurrentTorque * Throttle == 0f &&
+                    Braking == 0f &&
+                    Handbraking == 0f &&
+                    ExtremeBraking == 0f) {
+                    brakeTorque =
+                        BrakeTorque / 2f *
+                        RollingResistance;
+                }
+
+                wheel.wc.MotorTorque = motorTorque;
+                wheel.wc.BrakeTorque = brakeTorque;
             }
         }
 
