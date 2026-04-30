@@ -3265,7 +3265,8 @@ namespace CustomVP {
                 LeveledMaxTorque = BaseTorque * num3 / 100f * (100f + FinalTorquePercentage * num4);
                 LeveledMaxSpeed = BaseMaxSpeed * num3 / 100f * (100f + FinalTorquePercentage * num4 * num5);
                 //engine.TopGear = 9f - 4f * ((num6 - 80f) / 280f);
-                engine.TopGear = Mathf.Max(0.5f, 9f - 4f * ((num6 - 80f) / 280f));
+                if (engine)
+                    engine.TopGear = Mathf.Max(0.5f, 9f - 4f * ((num6 - 80f) / 280f));
             }
         }
 
