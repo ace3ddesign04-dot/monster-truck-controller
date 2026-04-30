@@ -4,7 +4,6 @@ namespace CustomVP
 {
 	public class CarEffects : MonoBehaviour
 	{
-		private SurfaceManager surfaceManager;
 
 		private CarController carController;
 
@@ -60,7 +59,6 @@ namespace CustomVP
 			ExhaustParticle = (UnityEngine.Object.Instantiate(Resources.Load("ParticleEffects/ExhaustParticle", typeof(ParticleSystem))) as ParticleSystem);
 			ExhaustParticle.transform.parent = base.transform;
 			ExhaustParticle.transform.localPosition = Vector3.zero;
-			surfaceManager = UnityEngine.Object.FindObjectOfType<SurfaceManager>();
 			ResourcesLoaded = true;
 		}
 
@@ -74,10 +72,6 @@ namespace CustomVP
 				}
 				DoParticles();
 				DoWheelBumpSounds();
-				if (surfaceManager != null)
-				{
-					DoSurfaceSounds();
-				}
 			}
 		}
 
@@ -140,12 +134,7 @@ namespace CustomVP
 				bool flag = false;
 				bool flag2 = false;
 				bool flag3 = false;
-				if (surfaceManager.SurfaceMaterialUnderCar != null)
-				{
-					flag = surfaceManager.SurfaceMaterialUnderCar.SkidSounds;
-					flag2 = surfaceManager.SurfaceMaterialUnderCar.OffroadSounds;
-					flag3 = surfaceManager.SurfaceMaterialUnderCar.WaterSplashSounds;
-				}
+				
 				foreach (_Wheel wheel in carController.wheels)
 				{
 					if (wheel.wc.sLong > num2 && wheel.wc.wheelCollider.isGrounded)

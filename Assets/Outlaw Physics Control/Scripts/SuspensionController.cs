@@ -156,26 +156,6 @@ public class SuspensionController : MonoBehaviour
 		}
 	}
 
-	public void TurnToMultiplayerCar()
-	{
-		if (!multiplayerCar)
-		{
-			WheelComponent[] componentsInChildren = GetComponentsInChildren<WheelComponent>(includeInactive: true);
-			for (int i = 0; i < componentsInChildren.Length; i++)
-			{
-				UnityEngine.Object.Destroy(componentsInChildren[i].gameObject);
-			}
-			GetComponent<Rigidbody>().mass = 300f;
-			GetComponent<Rigidbody>().useGravity = false;
-			UnityEngine.Object.Destroy(GetComponent<CarController>());
-			if (GetComponent<MotorcycleAssistant>() != null)
-			{
-				UnityEngine.Object.Destroy(GetComponent<MotorcycleAssistant>());
-			}
-			multiplayerCar = true;
-		}
-	}
-
 	public void UpdateSuspensions(float SteerAngle, float rpm)
 	{
 		if (CurrentFrontSuspension != null)
@@ -211,8 +191,6 @@ public class SuspensionController : MonoBehaviour
 		rearSuspension = 0;
 		SetFrontSuspension(frontSuspension);
 		SetRearSuspension(rearSuspension);
-		GetComponent<BodyPartsSwitcher>().CheckDynamicParts();
-		GetComponent<BodyPartsSwitcher>().CheckTriggerPartGroups();
 	}
 
 	public void SetRearSuspension(int ID)
@@ -248,8 +226,6 @@ public class SuspensionController : MonoBehaviour
 		CurrentRearSuspension.OnValidate();
 		LoadWheels();
 		DoWheelsSize();
-		GetComponent<BodyPartsSwitcher>().CheckDynamicParts();
-		GetComponent<BodyPartsSwitcher>().CheckTriggerPartGroups();
 	}
 
 	public void SetFrontSuspension(int ID)
@@ -321,10 +297,6 @@ public class SuspensionController : MonoBehaviour
 			{
 				LoadFrontWheels();
 			}
-			else
-			{
-				LoadFrontTankTracks();
-			}
 		}
 		if (CurrentRearSuspension != null && (!CurrentRearSuspension.DontLoadWheels || CurrentRearSuspension.DirtBikeWheels || CurrentFrontSuspension.ATVWheels))
 		{
@@ -337,165 +309,12 @@ public class SuspensionController : MonoBehaviour
 			{
 				LoadRearWheels();
 			}
-			else
-			{
-				LoadRearTankTracks();
-			}
-			LoadSpareWheels();
 		}
 		DoWheelsSize();
 		if (carController != null)
 		{
 			carController.FrontInstalledTiresID = FrontWheelsControls.Tire.IntValue;
 			carController.RearInstalledTiresID = RearWheelsControls.Tire.IntValue;
-		}
-		if (Application.isPlaying)
-		{
-			GetComponent<BodyPartsSwitcher>().UpdateDirtiness();
-		}
-	}
-
-	private void LoadFrontTankTracks()
-	{
-		if (CurrentFrontSuspension == null || CurrentFrontSuspension.WheelHolders == null)
-		{
-			return;
-		}
-		Transform[] wheelHolders = CurrentFrontSuspension.WheelHolders;
-		foreach (Transform transform in wheelHolders)
-		{
-			if (!(transform != null))
-			{
-				continue;
-			}
-			for (int j = 0; j < transform.childCount; j++)
-			{
-				if (!Application.isPlaying)
-				{
-					StartCoroutine(ForcedDestroy(transform.GetChild(j).gameObject));
-				}
-				else
-				{
-					UnityEngine.Object.DestroyImmediate(transform.GetChild(j).gameObject);
-				}
-			}
-		}
-		if (FrontRims != null && FrontRims.Length > 0)
-		{
-			for (int k = 0; k < FrontRims.Length; k++)
-			{
-				if (!Application.isPlaying)
-				{
-					StartCoroutine(ForcedDestroy(FrontRims[k]));
-				}
-				else
-				{
-					UnityEngine.Object.DestroyImmediate(FrontRims[k]);
-				}
-			}
-		}
-		if (FrontTires != null && FrontTires.Length > 0)
-		{
-			for (int l = 0; l < FrontTires.Length; l++)
-			{
-				if (!Application.isPlaying)
-				{
-					StartCoroutine(ForcedDestroy(FrontTires[l]));
-				}
-				else
-				{
-					UnityEngine.Object.DestroyImmediate(FrontTires[l]);
-				}
-			}
-		}
-		FrontRims = new GameObject[CurrentFrontSuspension.WheelHolders.Length];
-		FrontTires = null;
-		FrontTireSizeBones = null;
-		for (int m = 0; m < FrontRims.Length; m++)
-		{
-			FrontRims[m] = (UnityEngine.Object.Instantiate(Resources.Load("TankTracks/TankTracks", typeof(GameObject))) as GameObject);
-			FrontRims[m].layer = base.gameObject.layer;
-			FrontRims[m].transform.parent = base.transform;
-			FrontRims[m].transform.position = CurrentFrontSuspension.WheelHolders[m].position;
-			FrontRims[m].transform.localRotation = Quaternion.identity;
-			TankTracksController component = FrontRims[m].GetComponent<TankTracksController>();
-			component.wc = CurrentFrontSuspension.wheelColliders[m];
-			component.wheelHolder = CurrentFrontSuspension.WheelHolders[m];
-			component.MasterWheel.parent = CurrentFrontSuspension.WheelHolders[m];
-			component.MasterWheel.localPosition = Vector3.zero;
-			component.MasterWheel.localEulerAngles = Vector3.zero;
-		}
-	}
-
-	private void LoadRearTankTracks()
-	{
-		if (CurrentRearSuspension == null || CurrentRearSuspension.WheelHolders == null)
-		{
-			return;
-		}
-		Transform[] wheelHolders = CurrentRearSuspension.WheelHolders;
-		foreach (Transform transform in wheelHolders)
-		{
-			if (!(transform != null))
-			{
-				continue;
-			}
-			for (int j = 0; j < transform.childCount; j++)
-			{
-				if (!Application.isPlaying)
-				{
-					StartCoroutine(ForcedDestroy(transform.GetChild(j).gameObject));
-				}
-				else
-				{
-					UnityEngine.Object.DestroyImmediate(transform.GetChild(j).gameObject);
-				}
-			}
-		}
-		if (RearRims != null && RearRims.Length > 0)
-		{
-			for (int k = 0; k < RearRims.Length; k++)
-			{
-				if (!Application.isPlaying)
-				{
-					StartCoroutine(ForcedDestroy(RearRims[k]));
-				}
-				else
-				{
-					UnityEngine.Object.DestroyImmediate(RearRims[k]);
-				}
-			}
-		}
-		if (RearTires != null && RearTires.Length > 0)
-		{
-			for (int l = 0; l < RearTires.Length; l++)
-			{
-				if (!Application.isPlaying)
-				{
-					StartCoroutine(ForcedDestroy(RearTires[l]));
-				}
-				else
-				{
-					UnityEngine.Object.DestroyImmediate(RearTires[l]);
-				}
-			}
-		}
-		RearRims = new GameObject[CurrentRearSuspension.WheelHolders.Length];
-		RearTires = null;
-		RearTireSizeBones = null;
-		for (int m = 0; m < RearRims.Length; m++)
-		{
-			RearRims[m] = (UnityEngine.Object.Instantiate(Resources.Load("TankTracks/TankTracks", typeof(GameObject))) as GameObject);
-			RearRims[m].layer = base.gameObject.layer;
-			RearRims[m].transform.parent = base.transform;
-			RearRims[m].transform.position = CurrentRearSuspension.WheelHolders[m].position;
-			RearRims[m].transform.localRotation = Quaternion.identity;
-			TankTracksController component = RearRims[m].GetComponent<TankTracksController>();
-			component.wc = CurrentRearSuspension.wheelColliders[m];
-			component.wheelHolder = CurrentRearSuspension.WheelHolders[m];
-			component.MasterWheel.parent = CurrentRearSuspension.WheelHolders[m];
-			component.MasterWheel.localPosition = Vector3.zero;
-			component.MasterWheel.localEulerAngles = Vector3.zero;
 		}
 	}
 
@@ -652,91 +471,6 @@ public class SuspensionController : MonoBehaviour
 			RearTires[n].transform.localRotation = Quaternion.identity;
 			RearTires[n].transform.localScale = Vector3.one;
 			RearTireSizeBones.Add(RearTires[n].transform.Find("[BONE]Size"));
-		}
-	}
-
-	private void LoadSpareWheels()
-	{
-		BodyPartsSwitcher component = GetComponent<BodyPartsSwitcher>();
-		if (SpareWheelHolders == null || SpareWheelHolders.Length == 0)
-		{
-			return;
-		}
-		if (component != null)
-		{
-			GameObject[] spareWheelHolders = SpareWheelHolders;
-			foreach (GameObject gameObject in spareWheelHolders)
-			{
-				if (!(gameObject != null))
-				{
-					continue;
-				}
-				for (int j = 0; j < gameObject.transform.childCount; j++)
-				{
-					if (!Application.isPlaying)
-					{
-						StartCoroutine(ForcedDestroy(gameObject.transform.GetChild(j).gameObject));
-					}
-					else
-					{
-						UnityEngine.Object.DestroyImmediate(gameObject.transform.GetChild(j).gameObject);
-					}
-				}
-			}
-		}
-		if (SpareRims != null && SpareRims.Length > 0)
-		{
-			for (int k = 0; k < SpareRims.Length; k++)
-			{
-				if (!Application.isPlaying)
-				{
-					StartCoroutine(ForcedDestroy(SpareRims[k]));
-				}
-				else
-				{
-					UnityEngine.Object.DestroyImmediate(SpareRims[k]);
-				}
-			}
-		}
-		SpareRims = new GameObject[SpareWheelHolders.Length];
-		for (int l = 0; l < SpareRims.Length; l++)
-		{
-			if (SpareWheelHolders[l] != null)
-			{
-				SpareRims[l] = (UnityEngine.Object.Instantiate(Resources.Load("Rims/Rim" + RearWheelsControls.Rim.IntValue.ToString(), typeof(GameObject))) as GameObject);
-				SpareRims[l].layer = base.gameObject.layer;
-				SpareRims[l].transform.parent = SpareWheelHolders[l].transform;
-				SpareRims[l].transform.localPosition = Vector3.zero;
-				SpareRims[l].transform.localRotation = Quaternion.identity;
-				SpareRims[l].transform.localScale = Vector3.one;
-			}
-		}
-		if (SpareTires != null && SpareTires.Length > 0)
-		{
-			for (int m = 0; m < SpareTires.Length; m++)
-			{
-				if (!Application.isPlaying)
-				{
-					StartCoroutine(ForcedDestroy(SpareTires[m]));
-				}
-				else
-				{
-					UnityEngine.Object.DestroyImmediate(SpareTires[m]);
-				}
-			}
-		}
-		SpareTires = new GameObject[SpareWheelHolders.Length];
-		for (int n = 0; n < SpareTires.Length; n++)
-		{
-			if (SpareWheelHolders[n] != null)
-			{
-				SpareTires[n] = (UnityEngine.Object.Instantiate(Resources.Load("Tires/Tire" + RearWheelsControls.Tire.IntValue.ToString(), typeof(GameObject))) as GameObject);
-				SpareTires[n].layer = base.gameObject.layer;
-				SpareTires[n].transform.parent = SpareWheelHolders[n].transform;
-				SpareTires[n].transform.localPosition = Vector3.zero;
-				SpareTires[n].transform.localRotation = Quaternion.identity;
-				SpareTires[n].transform.localScale = Vector3.one;
-			}
 		}
 	}
 
@@ -964,50 +698,5 @@ public class SuspensionController : MonoBehaviour
 	{
 		FrontWheelsControls.WheelsRadius.FloatValue = 2.5f;
 		DoWheelsSize();
-	}
-
-	private void SetSuspensionControllerData(SuspensionControllerData sData)
-	{
-		frontSuspension = sData.SelectedFrontSuspension;
-		rearSuspension = sData.SelectedRearSuspension;
-		float defaultWheelColliderRadius = FrontWheelsControls.DefaultWheelColliderRadius;
-		float defaultWheelColliderRadius2 = RearWheelsControls.DefaultWheelColliderRadius;
-		FrontWheelsControls = sData.FrontWheelsControls;
-		RearWheelsControls = sData.RearWheelsControls;
-		FrontWheelsControls.DefaultWheelColliderRadius = defaultWheelColliderRadius;
-		RearWheelsControls.DefaultWheelColliderRadius = defaultWheelColliderRadius2;
-		Suspension[] allSuspensions = getAllSuspensions();
-		for (int i = 0; i < allSuspensions.Length; i++)
-		{
-			for (int j = 0; j < sData.AllSuspensionsDatas.Length; j++)
-			{
-				if (allSuspensions[i].SuspensionName == sData.AllSuspensionsDatas[j].SuspensionName)
-				{
-					SuspensionValue[] allValues = sData.AllSuspensionsDatas[j].AllValues;
-					allValues = ClampSuspensionValues(allValues, allSuspensions[i].SuspensionName);
-					allSuspensions[i].SetControlValues(allValues);
-					allSuspensions[i].UpgradeStage = sData.AllSuspensionsDatas[j].UpgradeStage;
-				}
-			}
-		}
-		SetFrontSuspension(frontSuspension);
-		SetRearSuspension(rearSuspension);
-		LoadWheels();
-		FrontWheelsControls = ClampWheelSizes(FrontWheelsControls, CurrentFrontSuspension.name);
-		RearWheelsControls = ClampWheelSizes(RearWheelsControls, CurrentRearSuspension.name);
-		DoWheelsSize();
-	}
-
-	public string ExportData()
-	{
-		SuspensionControllerData suspensionControllerData = getSuspensionControllerData();
-		return XmlSerialization.SerializeData<SuspensionControllerData>(suspensionControllerData);
-	}
-
-	public void ImportData(string xmlString)
-	{
-		SuspensionControllerData suspensionControllerData = new SuspensionControllerData();
-		suspensionControllerData = (SuspensionControllerData)XmlSerialization.DeserializeData<SuspensionControllerData>(xmlString);
-		SetSuspensionControllerData(suspensionControllerData);
 	}
 }

@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using UnityEditor.Playables;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityStandardAssets.CrossPlatformInput;
@@ -156,6 +157,7 @@ namespace CustomVP {
         }
         #endregion
 
+        public VehicleType vehicleType;
         public bool vehicleIsActive;
 
         #region Nose Wheeling
@@ -259,23 +261,11 @@ namespace CustomVP {
         public float NoseWheelieHoldAngleDegrees = 90f;
         // 90 = truck nose points straight toward ground.
 
-        [Header("Nose Wheelie Hard Vertical Lock")]
-        public bool NoseWheelieForceExactVertical = true;
-        public float NoseWheelieVerticalLockForce = 420f;
-        public float NoseWheelieVerticalLockDamping = 55f;
-        public float NoseWheelieVerticalLockMaxTorque = 520f;
-
         [Header("Nose Wheelie Tire Balance Input")]
         public bool NoseWheelieUseTireBalanceInput = true;
 
         // How fast target angle changes from race/brake input.
         public float NoseWheelieBalanceInputResponse = 90f;
-
-        // Extra pitch torque to make input feel tire-driven.
-        public float NoseWheelieTirePitchTorque = 45f;
-
-        // Damping for that input pitch torque.
-        public float NoseWheelieTirePitchDamping = 18f;
 
         private float noseWheelieRuntimeTargetAngle = 90f;
 
@@ -294,47 +284,20 @@ namespace CustomVP {
         public float NoseWheelieAngleRaiseSpeed = 4f;
         public float NoseWheelieAngleDropSpeed = 12f;
 
-        [Header("Nose Wheelie Assist")]
-        public float NoseWheeliePitchForce = 22f;
-        public float NoseWheeliePitchDamping = 6f;
-        public float NoseWheelieMaxPitchAssist = 22f;
-
-        public float NoseWheelieLiftPitchBoost = 10f;
-        public float NoseWheelieLiftPitchMaxBoost = 8f;
-
-        public float NoseWheelieRollForce = 8f;
-        public float NoseWheelieRollDamping = 4f;
-        public float NoseWheelieMaxRollAssist = 8f;
-
         [Header("Nose Wheelie Steering")]
         public float NoseWheelieSteerMultiplier = 1.35f;
         public float NoseWheelieSteerReturnSpeed = 160f;
         public float NoseWheelieSteerInputResponse = 8f;
-
-        public float NoseWheeliePivotYawForce = 18f;
-        public float NoseWheeliePivotYawDamping = 4f;
-        public float NoseWheelieTargetYawRate = 1.4f;
-        public float NoseWheelieMaxYawAssist = 8f;
-
-        public float NoseWheeliePivotSideForce = 14f;
-        public float NoseWheelieMaxPivotForce = 22f;
 
         [Header("Nose Wheelie Drive")]
         public float NoseWheelieFrontDriveMultiplier = 0f;
         // Keep 0 if you do NOT want the truck to drive forward during nose-wheelie.
         // Increase only if you want front wheels to pull during the stunt.
 
-        [Header("Nose Wheelie Lift Bias")]
-        public float NoseWheelieLiftFrontBrakeMultiplier = 1.4f;
-
-        [Range(0f, 1f)]
-        public float NoseWheelieLiftRearBrakeMultiplier = 0.05f;
-
         [Range(0f, 1f)]
         public float NoseWheelieLongitudinalAntirollMultiplier = 0.05f;
 
         private bool noseWheeliePrimed = false;
-        private bool noseWheelieLiftActive = false;
         public bool EnableNoseWheelieHold = false;
 
         private float cachedNoseWheelieAngle = 0f;
@@ -349,7 +312,6 @@ namespace CustomVP {
             }
 
             noseWheeliePrimed = false;
-            noseWheelieLiftActive = false;
             EnableNoseWheelieHold = false;
             cachedNoseWheelieAngle = 0f;
             noseWheelieHoldTimer = 0f;
@@ -374,7 +336,6 @@ namespace CustomVP {
         private void ReactivateNoseWheelieFromAngleReEntry() {
             EnableNoseWheelieHold = true;
             noseWheeliePrimed = false;
-            noseWheelieLiftActive = false;
             noseWheelieHoldTimer = 0f;
 
             noseWheelieAngleReEntryPending = false;
@@ -545,7 +506,6 @@ namespace CustomVP {
 
         private void StopNoseWheelie() {
             noseWheeliePrimed = false;
-            noseWheelieLiftActive = false;
             EnableNoseWheelieHold = false;
             cachedNoseWheelieAngle = 0f;
             noseWheelieHoldTimer = 0f;
@@ -737,7 +697,6 @@ namespace CustomVP {
             // This only blocks entry. It does NOT exit once nose-wheelie is active.
             if (IsOtherStuntBlockingNoseWheelie()) {
                 noseWheeliePrimed = false;
-                noseWheelieLiftActive = false;
 
                 cachedNoseWheelieAngle = Mathf.Abs(GetNoseWheelieTargetPitch());
 
@@ -763,7 +722,6 @@ namespace CustomVP {
                 FrontAxleGrounded()) {
 
                 EnableNoseWheelieHold = true;
-                noseWheelieLiftActive = false;
                 noseWheeliePrimed = false;
                 noseWheelieHoldTimer = 0f;
                 noseWheelieCachedInitialLockStrength = Mathf.Clamp01(NoseWheeliePoseLockStrength);
@@ -2070,19 +2028,11 @@ namespace CustomVP {
         public Vector3 manualCenterOfMass = Vector3.zero;
         public Transform comBase;
 
-        private BodyPartsSwitcher bodyPartsSwitcher;
+        //private BodyPartsSwitcher bodyPartsSwitcher;
 
         private CarUIControl carUIControl;
 
         private EngineController engine;
-
-        private IKDriverController Driver;
-
-        [HideInInspector] public VehicleDataManager vehicleDataManager;
-
-        private PhotonTransformView myTransformView;
-
-        [HideInInspector] public TrailerController myTrailer;
 
         [Header("Setup")][SerializeField] public List<_Wheel> wheels;
 
@@ -2273,8 +2223,6 @@ namespace CustomVP {
 
         [HideInInspector] public int RearInstalledTiresID;
 
-        private SurfaceManager surfaceManager;
-
         public FrictionSettings FrontFriction;
 
         public FrictionSettings RearFriction;
@@ -2327,10 +2275,6 @@ namespace CustomVP {
 
         [HideInInspector] public bool loadedOnOtherPlayerTrailer;
 
-        [HideInInspector] public PhotonTransformView ownerOfTrailer;
-
-        [HideInInspector] public PhotonTransformView ownerOfTrailerWeWantToLoadOn;
-
         private bool waitingForTrailerResponse;
 
         public float FinalTorquePercentage;
@@ -2371,12 +2315,8 @@ namespace CustomVP {
 
             carUIControl = FindObjectOfType<CarUIControl>();
             m_Rigidbody = GetComponent<Rigidbody>();
-            bodyPartsSwitcher = GetComponent<BodyPartsSwitcher>();
-            surfaceManager = FindObjectOfType<SurfaceManager>();
+            //bodyPartsSwitcher = GetComponent<BodyPartsSwitcher>();
             engine = GetComponent<EngineController>();
-            Driver = GetComponent<IKDriverController>();
-            vehicleDataManager = GetComponent<VehicleDataManager>();
-            myTransformView = GetComponent<PhotonTransformView>();
             lowestPointOfCollider = Vector3.zero;
             lowestPointOfCollider =
                 BodyColliders[0].ClosestPoint(BodyColliders[0].transform.position - transform.up * 10f);
@@ -2429,24 +2369,21 @@ namespace CustomVP {
                 }
 
                 carUIControl.SetupDriveButton(selectedPosition3);
-                if (vehicleDataManager.vehicleType == VehicleType.Bike) {
-                    carUIControl.HideAllDrivetrainOptions();
-                }
             }
 
             PartGroup partGroup = null;
-            if (bodyPartsSwitcher != null && bodyPartsSwitcher.partGroups != null) {
-                for (int k = 0; k < bodyPartsSwitcher.partGroups.Length; k++) {
-                    if (bodyPartsSwitcher.partGroups[k].partType == PartType.Snorkel) {
-                        partGroup = bodyPartsSwitcher.partGroups[k];
-                        break;
-                    }
-                }
+            //if (bodyPartsSwitcher != null && bodyPartsSwitcher.partGroups != null) {
+            //    for (int k = 0; k < bodyPartsSwitcher.partGroups.Length; k++) {
+            //        if (bodyPartsSwitcher.partGroups[k].partType == PartType.Snorkel) {
+            //            partGroup = bodyPartsSwitcher.partGroups[k];
+            //            break;
+            //        }
+            //    }
 
-                if (partGroup != null && partGroup.InstalledPart > 0) {
-                    HasSnorkel = true;
-                }
-            }
+            //    if (partGroup != null && partGroup.InstalledPart > 0) {
+            //        HasSnorkel = true;
+            //    }
+            //}
 
             if (wheels.Count > 2) {
                 wheels[0].steer = (wheels[1].steer = true);
@@ -2479,7 +2416,7 @@ namespace CustomVP {
                 collider.gameObject.layer = 26;
             }
 
-            IsSlideThrottle = DataStore.GetBool("SlideAccelerator");
+            IsSlideThrottle = false;
             CarController[] array2 = FindObjectsOfType<CarController>();
             int num = 0;
             while (true) {
@@ -2502,16 +2439,7 @@ namespace CustomVP {
         }
 
         private void OnTriggerEnter(Collider other) {
-            Checkpoint component = other.GetComponent<Checkpoint>();
-            if (!(component == null)) {
-                if (GameState.GameType == GameType.TrailRace) {
-                    TrailRaceManager.Instance.CollidedWithCheckpoint(component);
-                }
-                else {
-                    RacingManager.Instance.CollidedWithCheckpoint(component);
-                }
-            }
-
+            
             if (EnableAutoBackflip && other.CompareTag(BackflipLaunchTag)) {
                 backflipArmed = true;
                 backflipArmTime = Time.time;
@@ -2553,10 +2481,6 @@ namespace CustomVP {
                 acceleration = transform.InverseTransformVector(acceleration);
                 lastVelocity = m_Rigidbody.velocity;
                 return;
-            }
-
-            if (Time.time >= nextSurfaceManagerDataUpdateTime) {
-                GetDataFromSurfaceManager();
             }
 
             UpdateNoseWheelieState();
@@ -2629,120 +2553,7 @@ namespace CustomVP {
             TouchingGround = false;
         }
 
-        private void SendLoadOnTrailerRequest(PhotonTransformView otherTView) {
-            ownerOfTrailerWeWantToLoadOn = otherTView;
-            waitingForTrailerResponse = true;
-            carUIControl.waitingForLoadOnTrailerResponseWindow.SetActive(value: true);
-            carUIControl.loadOnOtherPlayerTrailerButton.SetActive(value: false);
-            carUIControl.ToggleCarExtras(Show: false);
-            carUIControl.ToggleCarControls(Show: false);
-            carUIControl.ToggleWinchControls(Show: false);
-            vehicleIsActive = false;
-            myTransformView.SendTraileringRequest(ownerOfTrailerWeWantToLoadOn.photonView);
-        }
-
-        public void OnLoadOnTrailerResponseDeclined(PhotonView sender) {
-            if (ownerOfTrailerWeWantToLoadOn != null && sender.tView == ownerOfTrailerWeWantToLoadOn &&
-                waitingForTrailerResponse) {
-                CancelTrailerLoadWaiting();
-            }
-        }
-
-        public void OnLoadOnTrailerResponseAccepted(PhotonView sender) {
-            if (ownerOfTrailerWeWantToLoadOn != null && sender.tView == ownerOfTrailerWeWantToLoadOn) {
-                LoadOnOtherTrailer(ownerOfTrailerWeWantToLoadOn);
-            }
-
-            if (waitingForTrailerResponse) {
-                CancelTrailerLoadWaiting();
-            }
-        }
-
-        private void CancelTrailerLoadWaiting() {
-            ownerOfTrailerWeWantToLoadOn = null;
-            waitingForTrailerResponse = false;
-            carUIControl.waitingForLoadOnTrailerResponseWindow.SetActive(value: false);
-            carUIControl.ToggleCarExtras(Show: true);
-            carUIControl.ToggleCarControls(Show: true);
-            carUIControl.ToggleWinchControls(Show: true);
-            vehicleIsActive = true;
-        }
-
-        public void LoadOnOtherTrailer(PhotonTransformView trailerOwner) {
-            vehicleDataManager.LoadOnTrailer(trailerOwner.trailer, turnToDummy: false);
-            myTransformView.TellEveryoneImOnTrailer(trailerOwner.photonView.viewID);
-            loadedOnOtherPlayerTrailer = true;
-            m_Rigidbody.interpolation = RigidbodyInterpolation.None;
-        }
-
-        public void UnloadFromOtherTrailer() {
-            ConfigurableJoint component = GetComponent<ConfigurableJoint>();
-            if (component != null) {
-                DestroyImmediate(component);
-            }
-
-            int pViewID = -1;
-            if (ownerOfTrailer != null) {
-                pViewID = ownerOfTrailer.photonView.viewID;
-            }
-
-            myTransformView.TellEveryoneImOuttaTrailer(pViewID);
-            loadedOnOtherPlayerTrailer = false;
-            m_Rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
-        }
-
         public void Update() {
-
-            if (carUIControl != null) // && PhotonNetwork.inRoom)
-            {
-                carUIControl.loadOnOtherPlayerTrailerButton.SetActive(value: false);
-                carUIControl.unloadFromOtherPlayerTrailerButton.SetActive(loadedOnOtherPlayerTrailer);
-
-                if (vehicleDataManager.vehicleType != VehicleType.Bike && !loadedOnOtherPlayerTrailer &&
-                    !waitingForTrailerResponse && !WinchManager.Instance.WinchMode &&
-                    (myTrailer == null || (myTrailer != null && !myTrailer.connected))) {
-                    PhotonView[] currentPlayerViews = MultiplayerManager.CurrentPlayerViews;
-                    if (currentPlayerViews != null && currentPlayerViews.Length > 0) {
-                        foreach (PhotonView photonView in currentPlayerViews) {
-                            if (photonView != null && photonView.tView.trailer != null &&
-                                photonView.tView.carOnTrailer == null && photonView.tView.trailer.mpCarOnMe == null &&
-                                photonView.tView.trailer.mpConnected &&
-                                Vector3.Distance(transform.position, photonView.tView.trailer.transform.position) < 8f) {
-                                carUIControl.loadOnOtherPlayerTrailerButton.SetActive(value: true);
-                                ownerOfTrailer = photonView.tView;
-                            }
-                        }
-                    }
-                }
-
-                if (CrossPlatformInputManager.GetButtonUp("LoadOnOtherTrailer")) {
-                    SendLoadOnTrailerRequest(ownerOfTrailer);
-                }
-
-                if (CrossPlatformInputManager.GetButtonUp("UnloadFromOtherTrailer")) {
-                    UnloadFromOtherTrailer();
-                }
-
-                if (CrossPlatformInputManager.GetButtonUp("CancelTrailerLoadWaiting")) {
-                    CancelTrailerLoadWaiting();
-                }
-
-                if (CrossPlatformInputManager.GetButtonUp("AcceptTrailering")) {
-                    myTransformView.AcceptTraileringRequest();
-                }
-
-                if (CrossPlatformInputManager.GetButtonUp("DeclineTrailering")) {
-                    myTransformView.DeclineTraierlingRequest();
-                }
-
-                if (loadedOnOtherPlayerTrailer && ownerOfTrailer == null) {
-                    UnloadFromOtherTrailer();
-                }
-
-                if (waitingForTrailerResponse && ownerOfTrailerWeWantToLoadOn == null) {
-                    CancelTrailerLoadWaiting();
-                }
-            }
 
             DoInput();
 
@@ -2807,21 +2618,14 @@ namespace CustomVP {
         }
 
         public void FlipCar() {
-            if (!loadedOnOtherPlayerTrailer) {
-                transform.rotation = Quaternion.LookRotation(transform.forward, Vector3.up);
-                Utility.AlignVehicleByGround(transform);
-                m_Rigidbody.velocity = Vector3.zero;
-                m_Rigidbody.angularVelocity = Vector3.zero;
-                m_Rigidbody.isKinematic = true;
-                if (myTrailer != null && myTrailer.connected) {
-                    myTrailer.Detach();
-                    myTrailer.Attach();
-                    myTrailer.rb.isKinematic = true;
-                }
-
-                Invoke("UnfreezeCar", 0.5f);
-                carUIControl.SwitchFlipButton(Show: false);
-            }
+            transform.rotation = Quaternion.LookRotation(transform.forward, Vector3.up);
+            Utility.AlignVehicleByGround(transform);
+            m_Rigidbody.velocity = Vector3.zero;
+            m_Rigidbody.angularVelocity = Vector3.zero;
+            m_Rigidbody.isKinematic = true;
+            
+            Invoke("UnfreezeCar", 0.5f);
+            carUIControl.SwitchFlipButton(Show: false);
         }
 
         private void RepairVehicle() {
@@ -2830,33 +2634,13 @@ namespace CustomVP {
 
         public void RespawnCar() {
             if (!DontPreventFromSliding && !loadedOnOtherPlayerTrailer) {
-                Transform availableSpawnPoint = VehicleLoader.Instance.GetAvailableSpawnPoint();
-                transform.position = availableSpawnPoint.position;
-                transform.rotation = availableSpawnPoint.rotation;
-                Utility.AlignVehicleByGround(transform);
-                if (RacingManager.Instance != null && RacingManager.Instance.IsPlayerBusy) {
-                    RacingManager.Instance.CancelRace();
-                }
-
-                carUIControl.SwitchFlipButton(Show: false);
-                m_Rigidbody.velocity = Vector3.zero;
-                m_Rigidbody.angularVelocity = Vector3.zero;
-                m_Rigidbody.isKinematic = true;
-                if (myTrailer != null) {
-                    myTrailer.Detach();
-                    myTrailer.Attach();
-                    myTrailer.rb.isKinematic = true;
-                }
-
+                Debug.Log("Respawn Me Here...");
                 Invoke("UnfreezeCar", 0.5f);
             }
         }
 
         private void UnfreezeCar() {
             m_Rigidbody.isKinematic = false;
-            if (myTrailer != null) {
-                myTrailer.rb.isKinematic = false;
-            }
         }
 
         public void SetCalculatedCOM() {
@@ -3068,10 +2852,7 @@ namespace CustomVP {
             }
 
             bool flag2 = false;
-            if (Driver != null) {
-                flag2 = Driver.KnockedOut;
-            }
-
+            
             if (flag && !flag2) {
                 Vector3 up2 = transform.up;
                 if (up2.y < 0f && !Passed90Degrees) {
@@ -3088,7 +2869,7 @@ namespace CustomVP {
                     if (up3.y > 0f) {
                         Passed90Degrees = false;
                         PassedVerticalState = false;
-                        carUIControl.ShowNotification((!BackFlip) ? "Frontflip!" : "Backflip!", blinking: false);
+                        // TODO: notify front flip and backflip here
                         BackFlip = false;
                         AngleCounter = 0f;
                         prevForward = Vector3.zero;
@@ -3114,23 +2895,12 @@ namespace CustomVP {
                 prevForward = vector;
                 if (AngleCounter > 320f || AngleCounter < -320f) {
                     AngleCounter = 0f;
-                    carUIControl.ShowNotification("Roll over!", blinking: false);
+                    // TODO: notify roll over
                 }
             }
             else {
                 AngleCounter = 0f;
                 prevForward = Vector3.zero;
-            }
-        }
-
-        private void UpdateFriction() {
-            for (int i = 0; i < wheels.Count; i++) {
-                float num = (100f + PowerParts
-                    .GetPart(GetComponent<VehicleDataManager>().vehicleType, PowerPartType.Grip, GripStage)
-                    .IncrementPercantage) / 100f;
-                wheels[i].wc.surfaceFrictionCoefficient =
-                    surfaceManager.GetTireFriction(i, (i <= 1) ? FrontInstalledTiresID : RearInstalledTiresID) * num;
-                wheels[i].wc.UpdateFriction();
             }
         }
 
@@ -3150,31 +2920,12 @@ namespace CustomVP {
             }
         }
 
-        public void UpdateEngineModel() {
-            EngineType engineType = EngineType.Stock;
-            if (BlowerStage > 0) {
-                engineType = EngineType.Blower;
-            }
-
-            if (TurboStage > 0 || DieselStage == 4) {
-                engineType = EngineType.Turbo;
-            }
-
-            GetComponent<BodyPartsSwitcher>().UpdateEngineModel(engineType);
-        }
-
         public float GetMaxTorque() {
-            if (vehicleDataManager == null) {
-                return 0f;
-            }
-
-            PowerPart part = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.EngineBlock,
-                EngineBlockStage);
-            PowerPart part2 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Head, HeadStage);
-            PowerPart part3 =
-                PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Valvetrain, ValvetrainStage);
-            PowerPart part4 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Turbo, TurboStage);
-            PowerPart part5 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Blower, BlowerStage);
+            PowerPart part = PowerParts.GetPart(vehicleType, PowerPartType.EngineBlock, EngineBlockStage);
+            PowerPart part2 = PowerParts.GetPart(vehicleType, PowerPartType.Head, HeadStage);
+            PowerPart part3 = PowerParts.GetPart(vehicleType, PowerPartType.Valvetrain, ValvetrainStage);
+            PowerPart part4 = PowerParts.GetPart(vehicleType, PowerPartType.Turbo, TurboStage);
+            PowerPart part5 = PowerParts.GetPart(vehicleType, PowerPartType.Blower, BlowerStage);
             float num = 0f;
             if (part != null) {
                 num += part.IncrementPercantage;
@@ -3211,63 +2962,58 @@ namespace CustomVP {
         }
 
         private void UpdateMotorPower() {
-            if (!(vehicleDataManager == null)) {
-                PowerPart part = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.EngineBlock,
-                    EngineBlockStage);
-                PowerPart part2 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Head, HeadStage);
-                PowerPart part3 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Valvetrain,
-                    ValvetrainStage);
-                PowerPart part4 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Weight, WeightStage);
-                PowerPart part5 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Weight,
-                    DurabilityStage);
-                PowerPart part6 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Turbo, TurboStage);
-                PowerPart part7 = PowerParts.GetPart(vehicleDataManager.vehicleType, PowerPartType.Blower, BlowerStage);
-                FinalTorquePercentage = 0f;
-                if (part != null) {
-                    FinalTorquePercentage += part.IncrementPercantage;
-                }
-
-                if (part2 != null) {
-                    FinalTorquePercentage += part2.IncrementPercantage;
-                }
-
-                if (part3 != null) {
-                    FinalTorquePercentage += part3.IncrementPercantage;
-                }
-
-                if (part4 != null) {
-                    FinalTorquePercentage += part4.IncrementPercantage;
-                }
-
-                if (part6 != null) {
-                    FinalTorquePercentage += part6.IncrementPercantage;
-                }
-
-                if (part7 != null) {
-                    FinalTorquePercentage += part7.IncrementPercantage;
-                }
-
-                float f = PerfectFuelRatio - FuelRatio;
-                float num = Mathf.Lerp(5f, -15f, Mathf.Abs(f) / 10f);
-                FinalTorquePercentage += num;
-                float f2 = PerfectTimingRatio - TimingRatio;
-                float num2 = Mathf.Lerp(5f, -15f, Mathf.Abs(f2) / 10f);
-                FinalTorquePercentage += num2;
-                float num3 = Mathf.Lerp(0.5f, 1f, CarHealth / 100f);
-                float num4 = ModsAdditionalBoost;
-                float num5 = ModsMaxSpeedBoost;
-                if (FinalTorquePercentage < 0f) {
-                    num4 = 1f;
-                    num5 = 1f;
-                }
-
-                float num6 = BaseTorque / 100f * (100f + FinalTorquePercentage);
-                LeveledMaxTorque = BaseTorque * num3 / 100f * (100f + FinalTorquePercentage * num4);
-                LeveledMaxSpeed = BaseMaxSpeed * num3 / 100f * (100f + FinalTorquePercentage * num4 * num5);
-                //engine.TopGear = 9f - 4f * ((num6 - 80f) / 280f);
-                if (engine)
-                    engine.TopGear = Mathf.Max(0.5f, 9f - 4f * ((num6 - 80f) / 280f));
+            PowerPart part = PowerParts.GetPart(vehicleType, PowerPartType.EngineBlock, EngineBlockStage);
+            PowerPart part2 = PowerParts.GetPart(vehicleType, PowerPartType.Head, HeadStage);
+            PowerPart part3 = PowerParts.GetPart(vehicleType, PowerPartType.Valvetrain, ValvetrainStage);
+            PowerPart part4 = PowerParts.GetPart(vehicleType, PowerPartType.Weight, WeightStage);
+            PowerPart part5 = PowerParts.GetPart(vehicleType, PowerPartType.Weight, DurabilityStage);
+            PowerPart part6 = PowerParts.GetPart(vehicleType, PowerPartType.Turbo, TurboStage);
+            PowerPart part7 = PowerParts.GetPart(vehicleType, PowerPartType.Blower, BlowerStage);
+            FinalTorquePercentage = 0f;
+            if (part != null) {
+                FinalTorquePercentage += part.IncrementPercantage;
             }
+
+            if (part2 != null) {
+                FinalTorquePercentage += part2.IncrementPercantage;
+            }
+
+            if (part3 != null) {
+                FinalTorquePercentage += part3.IncrementPercantage;
+            }
+
+            if (part4 != null) {
+                FinalTorquePercentage += part4.IncrementPercantage;
+            }
+
+            if (part6 != null) {
+                FinalTorquePercentage += part6.IncrementPercantage;
+            }
+
+            if (part7 != null) {
+                FinalTorquePercentage += part7.IncrementPercantage;
+            }
+
+            float f = PerfectFuelRatio - FuelRatio;
+            float num = Mathf.Lerp(5f, -15f, Mathf.Abs(f) / 10f);
+            FinalTorquePercentage += num;
+            float f2 = PerfectTimingRatio - TimingRatio;
+            float num2 = Mathf.Lerp(5f, -15f, Mathf.Abs(f2) / 10f);
+            FinalTorquePercentage += num2;
+            float num3 = Mathf.Lerp(0.5f, 1f, CarHealth / 100f);
+            float num4 = ModsAdditionalBoost;
+            float num5 = ModsMaxSpeedBoost;
+            if (FinalTorquePercentage < 0f) {
+                num4 = 1f;
+                num5 = 1f;
+            }
+
+            float num6 = BaseTorque / 100f * (100f + FinalTorquePercentage);
+            LeveledMaxTorque = BaseTorque * num3 / 100f * (100f + FinalTorquePercentage * num4);
+            LeveledMaxSpeed = BaseMaxSpeed * num3 / 100f * (100f + FinalTorquePercentage * num4 * num5);
+            //engine.TopGear = 9f - 4f * ((num6 - 80f) / 280f);
+            if (engine)
+                engine.TopGear = Mathf.Max(0.5f, 9f - 4f * ((num6 - 80f) / 280f));
         }
 
         private void SetupCounterWheels() {
@@ -3306,22 +3052,6 @@ namespace CustomVP {
                     wheels[i].wc.s_tailVal = ((i <= 1) ? FrontFriction.s_TailValue : RearFriction.s_TailValue);
                     wheels[i].wc.SpringCurve = ((i <= 1) ? frontSpringCurve : rearSpringCurve);
                 }
-            }
-        }
-
-        private void GetDataFromSurfaceManager() {
-            if (carUIControl != null) {
-                CarUIControl obj = carUIControl;
-                Vector3 up = transform.up;
-                obj.SwitchFlipButton(up.y < 0f && Mathf.Abs(Speed) < 2f);
-            }
-
-            nextSurfaceManagerDataUpdateTime = Time.time + SurfaceManagerDataUpdateInterval;
-            UpdateMotorPower();
-            CheckOverheating();
-            if (surfaceManager != null) {
-                CheckWaterDamage();
-                UpdateFriction();
             }
         }
 
@@ -3710,31 +3440,18 @@ namespace CustomVP {
                 flag = false;
             }
 
-            if (flag && !(col.impulse.magnitude < 100f) && !(col.gameObject.GetPhotonView() != null)) {
+            if (flag && !(col.impulse.magnitude < 100f)) {
                 float num = Mathf.InverseLerp(0f, MaximumHitDamageForce, col.impulse.magnitude);
                 float num2 = MaximumHitDamage * num;
                 num2 *= 1f - DurabilityStage * 0.01f;
-                if (GameState.GameMode == GameMode.Multiplayer || GameState.SceneName == "StuntPark") {
-                    num2 *= 0.5f;
-                }
-
+                
                 CarHealth = Mathf.Clamp(CarHealth - num2, 0f, 100f);
-            }
-        }
-
-        private void CheckWaterDamage() {
-            if (surfaceManager.IsCarInWater() && !HasSnorkel) {
-                Vector3 position = surfaceManager.WaterMeshes[surfaceManager.WhatWaterMeshIsCarOn()].transform.position;
-                Vector3 position2 = DamageWaterline.position;
-                if (position2.y < position.y) {
-                    DoWaterDamage(WaterDamage);
-                }
             }
         }
 
         private void DoWaterDamage(float Value) {
             CarHealth = Mathf.Clamp(CarHealth - Value, 0f, 100f);
-            carUIControl.ShowNotification("Water damage!", blinking: false);
+            // TODO: notify water damage
             CameraController.Instance.Shake();
         }
 
@@ -3760,94 +3477,8 @@ namespace CustomVP {
 
         private void DoOverheatDamage(float Value) {
             CarHealth = Mathf.Clamp(CarHealth - Value, 0f, 100f);
-            carUIControl.ShowNotification("Overheating!", blinking: false);
+            // TODO: notify overheating
             CameraController.Instance.Shake();
-        }
-
-        private CarControllerData GetCarControllerData() {
-            CarControllerData carControllerData = new CarControllerData();
-            carControllerData.CarHealth = CarHealth;
-            carControllerData.EngineBlockStage = EngineBlockStage;
-            carControllerData.GripStage = GripStage;
-            carControllerData.HeadStage = HeadStage;
-            carControllerData.ValvetrainStage = ValvetrainStage;
-            carControllerData.WeightStage = WeightStage;
-            carControllerData.DurabilityStage = DurabilityStage;
-            carControllerData.TurboStage = TurboStage;
-            carControllerData.BlowerStage = BlowerStage;
-            carControllerData.GearingStage = GearingStage;
-            carControllerData.DieselStage = DieselStage;
-            carControllerData.TransmissionType = (int)transmissionType;
-            carControllerData.ManualTransmissionPurchased = ManualTransmissionPurchased;
-            carControllerData.DieselPurchased = DieselPurchased;
-            carControllerData.PurchasedBlowerStage = PurchasedBlowerStage;
-            carControllerData.PurchasedTurboStage = PurchasedTurboStage;
-            carControllerData.TankTracksPurchased = TankTracksPurchased;
-            carControllerData.TuningEnginePurchased = TuningEnginePurchased;
-            carControllerData.PerfectSetupPurchased = PerfectSetupPurchased;
-            carControllerData.GearRatios = GearRatios;
-            carControllerData.LowGearRatio = LowGearRatio;
-            carControllerData.Ebrake = Ebrake;
-            carControllerData.FuelRatio = FuelRatio;
-            carControllerData.TimingRatio = TimingRatio;
-            carControllerData.PerfectFuelRatio = PerfectFuelRatio;
-            carControllerData.PerfectTimingRatio = PerfectTimingRatio;
-            return carControllerData;
-        }
-
-        public void SetCarControllerData(CarControllerData cData) {
-            CarHealth = cData.CarHealth;
-            EngineBlockStage = cData.EngineBlockStage;
-            GripStage = cData.GripStage;
-            HeadStage = cData.HeadStage;
-            ValvetrainStage = cData.ValvetrainStage;
-            WeightStage = cData.WeightStage;
-            DurabilityStage = cData.DurabilityStage;
-            TurboStage = cData.TurboStage;
-            BlowerStage = cData.BlowerStage;
-            GearingStage = cData.GearingStage;
-            DieselStage = cData.DieselStage;
-            transmissionType = (TransmissionType)cData.TransmissionType;
-            ManualTransmissionPurchased = cData.ManualTransmissionPurchased;
-            PurchasedTurboStage = cData.PurchasedTurboStage;
-            PurchasedBlowerStage = cData.PurchasedBlowerStage;
-            DieselPurchased = cData.DieselPurchased;
-            TankTracksPurchased = cData.TankTracksPurchased;
-            TuningEnginePurchased = cData.TuningEnginePurchased;
-            PerfectSetupPurchased = cData.PerfectSetupPurchased;
-            FuelRatio = cData.FuelRatio;
-            TimingRatio = cData.TimingRatio;
-            PerfectFuelRatio = cData.PerfectFuelRatio;
-            PerfectTimingRatio = cData.PerfectTimingRatio;
-            if (cData.GearRatios != null && cData.GearRatios.Length == 5) {
-                GearRatios = cData.GearRatios;
-                LowGearRatio = cData.LowGearRatio;
-            }
-
-            if (PerfectFuelRatio == 0f) {
-                PerfectFuelRatio = Random.Range(-10f, 10f);
-            }
-
-            if (PerfectTimingRatio == 0f) {
-                PerfectTimingRatio = Random.Range(-10f, 10f);
-            }
-
-            PerfectFuelRatio = Mathf.Round(PerfectFuelRatio / 0.5f) * 0.5f;
-            PerfectTimingRatio = Mathf.Round(PerfectTimingRatio / 0.5f) * 0.5f;
-            Ebrake = cData.Ebrake;
-            OnValidate();
-            UpdateEngineModel();
-        }
-
-        public string ExportData() {
-            CarControllerData carControllerData = GetCarControllerData();
-            return XmlSerialization.SerializeData<CarControllerData>(carControllerData);
-        }
-
-        public void ImportData(string XMLString) {
-            CarControllerData carControllerData =
-                (CarControllerData)XmlSerialization.DeserializeData<CarControllerData>(XMLString);
-            SetCarControllerData(carControllerData);
         }
     }
 }

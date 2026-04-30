@@ -135,17 +135,17 @@ public class CameraController : MonoBehaviour
 	//	}
 	//}
 
-	private IKDriverController driver
-	{
-		get
-		{
-			if (VehicleLoader.Instance != null)
-			{
-				return VehicleLoader.Instance.playerDriver;
-			}
-			return null;
-		}
-	}
+	//private IKDriverController driver
+	//{
+	//	get
+	//	{
+	//		if (VehicleLoader.Instance != null)
+	//		{
+	//			return VehicleLoader.Instance.playerDriver;
+	//		}
+	//		return null;
+	//	}
+	//}
 
 	private Transform target
 	{
@@ -158,10 +158,6 @@ public class CameraController : MonoBehaviour
 			if (carController != null)
 			{
 				return carController.transform;
-			}
-			if (MenuManager.Instance != null)
-			{
-				return MenuManager.Instance.CameraTarget;
 			}
 			return null;
 		}
@@ -215,21 +211,9 @@ public class CameraController : MonoBehaviour
 		ShakeAmount = 1f;
 	}
 
-	private void ToggleDriver(bool Show)
-	{
-		if (!(driver == null))
-		{
-			driver.ToggleDriver(Show, !Show);
-		}
-	}
 
 	public string SwitchCamera()
 	{
-		if (driver != null && driver.KnockedOut)
-		{
-			return null;
-		}
-		ToggleDriver(Show: true);
 		if (cameraMode == CameraMode.Follow)
 		{
 			cameraMode = CameraMode.Free;
@@ -238,7 +222,6 @@ public class CameraController : MonoBehaviour
 		if (cameraMode == CameraMode.Free)
 		{
 			cameraMode = CameraMode.FirstPerson;
-			ToggleDriver(Show: false);
 			return "First Person";
 		}
 		if (cameraMode == CameraMode.FirstPerson)
