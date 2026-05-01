@@ -2485,20 +2485,6 @@ namespace CustomVP {
                 carUIControl.SetupDriveButton(selectedPosition3);
             }
 
-            PartGroup partGroup = null;
-            //if (bodyPartsSwitcher != null && bodyPartsSwitcher.partGroups != null) {
-            //    for (int k = 0; k < bodyPartsSwitcher.partGroups.Length; k++) {
-            //        if (bodyPartsSwitcher.partGroups[k].partType == PartType.Snorkel) {
-            //            partGroup = bodyPartsSwitcher.partGroups[k];
-            //            break;
-            //        }
-            //    }
-
-            //    if (partGroup != null && partGroup.InstalledPart > 0) {
-            //        HasSnorkel = true;
-            //    }
-            //}
-
             if (wheels.Count > 2) {
                 wheels[0].steer = (wheels[1].steer = true);
 
@@ -2733,7 +2719,6 @@ namespace CustomVP {
 
         public void FlipCar() {
             transform.rotation = Quaternion.LookRotation(transform.forward, Vector3.up);
-            Utility.AlignVehicleByGround(transform);
             m_Rigidbody.velocity = Vector3.zero;
             m_Rigidbody.angularVelocity = Vector3.zero;
             m_Rigidbody.isKinematic = true;
