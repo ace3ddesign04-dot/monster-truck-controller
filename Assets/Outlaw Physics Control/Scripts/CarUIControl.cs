@@ -1,5 +1,4 @@
 using CustomVP;
-using ExitGames.Client.Photon;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -150,42 +149,6 @@ public class CarUIControl : MonoBehaviour
 
 	public GameObject HideGaugeImage;
 
-	[Header("Winch")]
-	public GameObject ToggleButton;
-
-	public GameObject TowButton;
-
-	public GameObject LeftArrowButton;
-
-	public GameObject RightArrowButton;
-
-	public GameObject AttachButton;
-
-	public GameObject SendWinchRequestButton;
-
-	public GameObject WinchRequestWindow;
-
-	public Text WinchRequestText;
-
-	public GameObject DetachAttachedCarButton;
-
-	private bool notificationBlinking;
-
-	[Header("Trailers")]
-	public GameObject loadOnOtherPlayerTrailerButton;
-
-	public GameObject unloadFromOtherPlayerTrailerButton;
-
-	public GameObject detachTrailerButton;
-
-	public GameObject attachTrailerButton;
-
-	public Button swapVehiclesButton;
-
-	public GameObject waitingForLoadOnTrailerResponseWindow;
-
-	public GameObject traileringRequestWindow;
-
 	[Header("Race controls")]
 	public GameObject EventLobby;
 
@@ -269,8 +232,6 @@ public class CarUIControl : MonoBehaviour
 
 	public GameObject Map;
 
-	public NavigationMap MapScript;
-
 	[HideInInspector]
 	public Transform CurrentCheckpoint;
 
@@ -329,113 +290,54 @@ public class CarUIControl : MonoBehaviour
 	//	}
 	//}
 
-	private RacingManager racingManager => RacingManager.Instance;
-
 	private CameraController camController => CameraController.Instance;
 
 	private void Awake()
 	{
 		Instance = this;
-		if (GameState.GameMode == GameMode.Multiplayer)
-		{
-			LoadingScreenLabel.text = "Joining other Outlaws...";
-		}
-		else
-		{
-			LoadingScreenLabel.text = string.Empty;
-		}
 		if (SceneManager.GetActiveScene().name == "CustomMap")
 		{
 			LoadingScreenLabel.text = "Level editor builds your level, it may take some time. Wait...";
 		}
-		ChatBox.SetActive(GameState.GameMode == GameMode.Multiplayer);
 	}
+
 
 	private void Start()
 	{
-		MapScript = Map.GetComponent<NavigationMap>();
 		Color color = NotificationText.color;
 		color.a = 0f;
 		NotificationText.color = color;
 		ToggleCarControls(Show: true);
 		ToggleCarExtras(Show: true);
-		ToggleWinchControls(Show: true);
 		HideEventLobby();
 		HideShowCountdown(Show: false);
-		HideShowRaceUI(Show: false, ShowCancelButton: false);
-		SwitchWinchTowButton(Show: false);
-		SwitchWinchTargetSelector(Show: false);
 		SwitchFlipButton(Show: false);
-		HideWinchRequestWindow();
-		ToggleAttachButton(DynamicTarget: false, Show: false);
-		SwitchDetachButton(Show: false);
 		PasswordPanel.SetActive(value: false);
-		ToggleReadyToRaceWindow(Show: false);
-		HideShoTrailRaceFinishWindow(Show: false, string.Empty, 0f, 0f, string.Empty, string.Empty);
-		HideShowOtherPlayerDisconnectedWindow(Show: false);
-		HidePlayerRouteFinish();
-		detachTrailerButton.SetActive(value: false);
-		attachTrailerButton.SetActive(value: false);
-		swapVehiclesButton.gameObject.SetActive(value: false);
-		loadOnOtherPlayerTrailerButton.SetActive(value: false);
-		unloadFromOtherPlayerTrailerButton.SetActive(value: false);
-		traileringRequestWindow.SetActive(value: false);
-		waitingForLoadOnTrailerResponseWindow.SetActive(value: false);
 		RepairWindow.SetActive(value: false);
-		if (GameState.GameMode == GameMode.Multiplayer)
-		{
-			if (GameState.GameType == GameType.TrailRace)
-			{
-				RaceBetText.gameObject.SetActive(value: true);
-				string text = "$" + GameState.TrailRaceBet.ToString();
-				if (text == "$0")
-				{
-					text = "FREE RACE";
-				}
-				RaceBetText.text = "Race bet: " + text;
-			}
-			if (GameState.Password != null && GameState.Password != string.Empty)
-			{
-				PasswordPanel.SetActive(value: true);
-				MapPassword.text = "Map password: " + GameState.Password;
-			}
-		}
+		
 		GameObject[] touchAccelerators = TouchAccelerators;
 		foreach (GameObject gameObject in touchAccelerators)
 		{
-			gameObject.SetActive(!DataStore.GetBool("SlideAccelerator"));
+			gameObject.SetActive(true);
 		}
 		GameObject[] slideAccelerators = SlideAccelerators;
 		foreach (GameObject gameObject2 in slideAccelerators)
 		{
-			gameObject2.SetActive(DataStore.GetBool("SlideAccelerator"));
+			gameObject2.SetActive(false);
 		}
 		ArrowControls.SetActive(value: false);
 		SteeringWheelControls.SetActive(value: false);
 		TiltControls.SetActive(value: false);
-		controlType = (ControlType)DataStore.GetInt("ControlsType", 0);
+		controlType = 0;
 		ToggleCarControls(Show: true);
 		if (Map != null)
 		{
 			Map.SetActive(value: false);
 		}
-		if (DataStore.GetInt("GameSound", 1) == 0)
-		{
-			AudioListener.volume = 0f;
-		}
-		else
-		{
-			AudioListener.volume = 1f;
-		}
+		
+		AudioListener.volume = 1f;
 		PlayerInformationTemplate = Resources.Load<GameObject>("UI/PlayerInfoPanel");
-		if (GameState.GameMode != GameMode.Multiplayer)
-		{
-			MultiplayerLabelsButton.SetActive(value: false);
-		}
-		else
-		{
-			MultiplayerLabelsButton.SetActive(value: true);
-		}
+		
 		for (int k = 0; k < 10; k++)
 		{
 			PlayerInformationBoxesPool[k] = UnityEngine.Object.Instantiate(PlayerInformationTemplate, base.transform);
@@ -450,6 +352,7 @@ public class CarUIControl : MonoBehaviour
 
 	private void OnValidate()
 	{
+		Start();
 		if (Application.isPlaying)
 		{
 			ToggleCarControls(CarControlsEnabled);
@@ -489,10 +392,7 @@ public class CarUIControl : MonoBehaviour
 	{
 		Color color = NotificationText.color;
 		color.a = Mathf.MoveTowards(color.a, 0f, Time.deltaTime);
-		if (notificationBlinking && color.a == 0f)
-		{
-			color.a = 1f;
-		}
+		
 		NotificationText.color = color;
 		if (engine != null && carController != null)
 		{
@@ -501,182 +401,6 @@ public class CarUIControl : MonoBehaviour
 		if (CurrentCheckpoint != null)
 		{
 			DoCheckpointArrow();
-		}
-		if (StashManager.Instance != null)
-		{
-			if (StashManager.Instance.LockboxActive)
-			{
-				if (LockboxArrow == null)
-				{
-					LockboxArrow = UnityEngine.Object.Instantiate(DirectionalArrow, DirectionalArrow.transform.parent);
-					LockboxArrow.gameObject.SetActive(value: true);
-					LockboxArrow.color = new Color(1f, 0f, 0f, 0.8f);
-				}
-				if (LockboxArrow != null)
-				{
-					DoDirectionalArrow(LockboxArrow, StashManager.Instance.CurrentLockbox.transform);
-					LockboxArrow.gameObject.SetActive(value: true);
-				}
-			}
-			else if (LockboxArrow != null && LockboxArrow.gameObject.activeInHierarchy)
-			{
-				LockboxArrow.gameObject.SetActive(value: false);
-			}
-		}
-		if (GameState.GameMode == GameMode.Multiplayer && MultiplayerManager.CurrentPlayers != null && MapScript != null)
-		{
-			if (!ShowMultiplayerLabels)
-			{
-				for (int i = 0; i < PlayerInformationBoxes.Length; i++)
-				{
-					if (PlayerInformationBoxes[i] != null && PlayerInformationBoxes[i].activeInHierarchy)
-					{
-						PlayerInformationBoxes[i].SetActive(value: false);
-					}
-				}
-			}
-			else
-			{
-				if (PlayerInformationBoxes.Length != MultiplayerManager.CurrentPlayers.Count)
-				{
-					for (int j = 0; j < PlayerInformationBoxes.Length; j++)
-					{
-						if (PlayerInformationBoxes[j] != null)
-						{
-							PlayerInformationBoxes[j].SetActive(value: false);
-						}
-					}
-					PlayerInformationBoxes = new GameObject[MultiplayerManager.CurrentPlayers.Count];
-					for (int k = 0; k < MultiplayerManager.CurrentPlayers.Count; k++)
-					{
-						PlayerInformationBoxes[k] = PlayerInformationBoxesPool[k];
-						PlayerInformationBoxes[k].GetComponent<PlayerInfoUI>().Populate("------", 0, isMember: false);
-						if (MultiplayerManager.CurrentPlayerViews[k] != null)
-						{
-							string name = "------";
-							int xp = 0;
-							bool isMember = false;
-							if (MultiplayerManager.CurrentPlayerViews != null && MultiplayerManager.CurrentPlayerViews.Length > k && MultiplayerManager.CurrentPlayerViews[k] != null && MultiplayerManager.CurrentPlayerViews[k].owner != null && MultiplayerManager.CurrentPlayerViews[k].owner.CustomProperties != null)
-							{
-								Hashtable customProperties = MultiplayerManager.CurrentPlayerViews[k].owner.CustomProperties;
-								if (customProperties.ContainsKey("XP"))
-								{
-									xp = int.Parse(customProperties["XP"].ToString());
-								}
-								if (customProperties.ContainsKey("IsMember"))
-								{
-									isMember = bool.Parse(customProperties["IsMember"].ToString());
-								}
-								if (customProperties.ContainsKey("DisplayName"))
-								{
-									name = customProperties["DisplayName"].ToString();
-								}
-							}
-							PlayerInformationBoxes[k].GetComponent<PlayerInfoUI>().Populate(name, xp, isMember);
-						}
-						else
-						{
-							PlayerInformationBoxes[k].SetActive(value: false);
-						}
-					}
-				}
-				for (int l = 0; l < PlayerInformationBoxes.Length && l < MultiplayerManager.CurrentPlayers.Count; l++)
-				{
-					if (MultiplayerManager.CurrentPlayers[l] != null)
-					{
-						Vector3 vector = Camera.main.WorldToScreenPoint(MultiplayerManager.CurrentPlayers[l].transform.position + Vector3.up * 1.3f);
-						if (PlayerInformationBoxes[l] != null && vector.z > 0f && carController != null && Vector3.Distance(MultiplayerManager.CurrentPlayers[l].transform.position, carController.transform.position) < 15f)
-						{
-							PlayerInformationBoxes[l].transform.position = new Vector3(vector.x, vector.y, 0f);
-							PlayerInformationBoxes[l].SetActive(value: true);
-						}
-						else if (PlayerInformationBoxes[l] != null)
-						{
-							PlayerInformationBoxes[l].SetActive(value: false);
-						}
-					}
-					else if (PlayerInformationBoxes[l] != null)
-					{
-						PlayerInformationBoxes[l].SetActive(value: false);
-					}
-				}
-			}
-			if (MapScript.OtherCars.Length != MultiplayerManager.CurrentPlayers.Count)
-			{
-				UnityEngine.Debug.Log("Count didn't match, reinitializing array");
-				MapScript.OtherCars = new Transform[MultiplayerManager.CurrentPlayers.Count];
-			}
-			else
-			{
-				List<Transform> list = new List<Transform>();
-				for (int m = 0; m < MultiplayerManager.CurrentPlayers.Count; m++)
-				{
-					bool flag = false;
-					for (int n = 0; n < MapScript.OtherCars.Length; n++)
-					{
-						if (MultiplayerManager.CurrentPlayers[m] != null && MapScript.OtherCars[n] == MultiplayerManager.CurrentPlayers[m].transform)
-						{
-							flag = true;
-						}
-					}
-					if (!flag && MultiplayerManager.CurrentPlayers[m] != null)
-					{
-						list.Add(MultiplayerManager.CurrentPlayers[m].transform);
-					}
-				}
-				if (list.Count > 0)
-				{
-					for (int num = 0; num < MultiplayerManager.CurrentPlayers.Count; num++)
-					{
-						if (MultiplayerManager.CurrentPlayers[num] != null)
-						{
-							MapScript.OtherCars[num] = MultiplayerManager.CurrentPlayers[num].transform;
-						}
-					}
-				}
-			}
-		}
-		if (GameState.GameMode == GameMode.Multiplayer && MultiplayerManager.CurrentPlayers != null && MultiplayerManager.CurrentPlayers.Count > 0 && MultiplayerManager.CurrentPlayers[0] != null)
-		{
-			if (MultiplayerManager.CurrentPlayers.Count != DirectionalArrows.Count)
-			{
-				for (int num2 = 0; num2 < DirectionalArrows.Count; num2++)
-				{
-					if (DirectionalArrows[num2] != null)
-					{
-						DirectionalArrows[num2].gameObject.SetActive(value: false);
-					}
-				}
-				DirectionalArrows.Clear();
-				for (int num3 = 0; num3 < MultiplayerManager.CurrentPlayers.Count; num3++)
-				{
-					DirectionalArrows.Add(DirectionalArrowsPool[num3]);
-					DirectionalArrows[DirectionalArrows.Count - 1].gameObject.SetActive(value: true);
-					DirectionalArrows[DirectionalArrows.Count - 1].color = new Color(0f, 1f, 0f, 0.8f);
-				}
-			}
-			for (int num4 = 0; num4 < DirectionalArrows.Count && num4 < MultiplayerManager.CurrentPlayers.Count; num4++)
-			{
-				if (MultiplayerManager.CurrentPlayers[num4] != null)
-				{
-					DoDirectionalArrow(DirectionalArrows[num4], MultiplayerManager.CurrentPlayers[num4].transform);
-				}
-				else if (DirectionalArrows[num4] != null)
-				{
-					DirectionalArrows[num4].gameObject.SetActive(value: false);
-				}
-			}
-		}
-		else
-		{
-			DirectionalArrow.gameObject.SetActive(value: false);
-			foreach (Image directionalArrow in DirectionalArrows)
-			{
-				if (directionalArrow != null)
-				{
-					directionalArrow.gameObject.SetActive(value: false);
-				}
-			}
 		}
 	}
 
@@ -799,53 +523,14 @@ public class CarUIControl : MonoBehaviour
 		}
 	}
 
-	public void SwitchWinchTargetSelector(bool Show)
-	{
-		LeftArrowButton.SetActive(Show);
-		RightArrowButton.SetActive(Show);
-		LandAnchorButton.SetActive(Show);
-	}
-
-	public void ToggleAttachButton(bool DynamicTarget, bool Show)
-	{
-		AttachButton.SetActive(Show && !DynamicTarget);
-		SendWinchRequestButton.SetActive(Show && DynamicTarget);
-	}
-
-	public void ShowWinchRequestWindow(string text)
-	{
-		WinchRequestWindow.SetActive(value: true);
-		WinchRequestText.text = text;
-	}
-
-	private void HideWinchRequestWindow()
-	{
-		WinchRequestWindow.SetActive(value: false);
-	}
-
-	public void SwitchWinchToggleButton(bool Show)
-	{
-		ToggleButton.SetActive(Show);
-	}
-
 	public void ToggleRepairButton(bool Show)
 	{
 		RepairButton.SetActive(Show);
 	}
 
-	public void SwitchWinchTowButton(bool Show)
-	{
-		TowButton.SetActive(Show);
-	}
-
 	public void SwitchFlipButton(bool Show)
 	{
 		FlipButton.SetActive(Show);
-	}
-
-	public void SwitchDetachButton(bool Show)
-	{
-		DetachAttachedCarButton.SetActive(Show);
 	}
 
 	public void UpdateTimer(float Seconds)
@@ -862,7 +547,6 @@ public class CarUIControl : MonoBehaviour
 			string text2 = text.text;
 			text.text = text2 + " (" + swapTimer + ")";
 		}
-		swapVehiclesButton.interactable = (swapTimer == 0);
 	}
 
 	public void UpdateThermometer(float TemperatureRatio)
@@ -890,105 +574,15 @@ public class CarUIControl : MonoBehaviour
 		Countdown.SetActive(Show);
 	}
 
-	public void HideShowOtherPlayerDisconnectedWindow(bool Show)
-	{
-		OtherPlayerDisconnectedWindow.SetActive(Show);
-		OpponentLeftRewardText.text = "Your opponent left!";
-	}
-
-	public void ToggleReadyToRaceWindow(bool Show)
-	{
-		ReadyToRaceWindow.SetActive(Show);
-	}
-
-	public void HideShowRaceUI(bool Show, bool ShowCancelButton)
-	{
-		InRaceUI.SetActive(Show);
-		RaceCancelButton.SetActive(ShowCancelButton);
-	}
-
-	public void ShowRammingWindow(string playerName)
-	{
-		RammingPlayerName.text = "Looks like player " + playerName + " is ramming you. Block collisions with him?";
-		RammingWindow.SetActive(value: true);
-	}
-
 	public void ToggleRearView()
 	{
 		camController.ForceRearView = !camController.ForceRearView;
-	}
-
-	public void RepairVehicle()
-	{
-		StatsData statsData = GameState.LoadStatsData();
-		int num = (int)(1000f * (100f - carController.CarHealth) / 100f);
-		if (statsData.Money > num)
-		{
-			carController.CarHealth = 100f;
-			GameState.SubtractCurrency(num, Currency.Money);
-		}
-		else if (statsData.Gold > Utility.CashToGold(num))
-		{
-			carController.CarHealth = 100f;
-			GameState.SubtractCurrency(Utility.CashToGold(num), Currency.Gold);
-		}
-		else
-		{
-			ShowNotification("Not enough money!", blinking: false);
-		}
 	}
 
 	public void CalculateRepairCost()
 	{
 		int num = (int)(1000f * (100f - carController.CarHealth) / 100f);
 		RepairCostText.text = "Repair vehicle for $" + num + "?";
-	}
-
-	public void ShowEventLobby(Route route)
-	{
-		EventLobby.SetActive(value: true);
-		RecordTime.text = "--Loading--";
-		Text[] awardTimes = AwardTimes;
-		foreach (Text text in awardTimes)
-		{
-			text.text = "----";
-		}
-		Text[] awardAmounts = AwardAmounts;
-		foreach (Text text2 in awardAmounts)
-		{
-			text2.text = "----";
-		}
-	}
-
-	public void DisplayEventInfo()
-	{
-		long @long = DataStore.GetLong(RouteManager.Instance.mapName + RacingManager.Instance.ActiveRoute.RouteName + carController.vehicleDataManager.vehicleType.ToString());
-		TimeSpan timeSpan = TimeSpan.FromSeconds((float)@long / 100f);
-		RecordTime.text = $"{timeSpan.Minutes:D2}:{timeSpan.Seconds:D2}.{timeSpan.TotalMilliseconds / 10.0:00}";
-		if (@long == -1 || @long == 0)
-		{
-			RouteGoal routeGoal = RouteGoal.Default(@long, RacingManager.Instance.ActiveRoute, carController.vehicleDataManager.vehicleType);
-			RecordTime.text = "----";
-			AwardTimes[0].text = "Finish";
-			AwardAmounts[0].text = routeGoal.BaseCashPayment.ToString("$0,0");
-			return;
-		}
-		RouteGoal routeGoal2 = null;
-		routeGoal2 = ((RacingManager.Instance.ActiveRoute.RouteGoals.Count <= 0) ? RouteGoal.Default(@long, RacingManager.Instance.ActiveRoute, carController.vehicleDataManager.vehicleType) : RacingManager.Instance.ActiveRoute.RouteGoals[0]);
-		for (int i = 0; i < 4; i++)
-		{
-			RouteGoalLimit limits = routeGoal2.GetLimits((AwardLevel)i);
-			TimeSpan timeSpan2 = TimeSpan.FromSeconds((float)limits.TimeLimit / 100f);
-			if (i == 0)
-			{
-				AwardTimes[i].text = "Finish";
-			}
-			else
-			{
-				AwardTimes[i].text = $"{timeSpan2.Minutes:D2}:{timeSpan2.Seconds:D2}.{timeSpan2.Milliseconds / 10:00}";
-			}
-			AwardAmounts[i].text = (routeGoal2.BaseCashPayment + routeGoal2.LevelUpCashIncrement * i).ToString("$0,0");
-		}
 	}
 
 	public void ShowPause()
@@ -998,108 +592,32 @@ public class CarUIControl : MonoBehaviour
 		PausePanel.SetActive(value: true);
 	}
 
-	public void ShowTeam(PunTeams.Team myTeam)
-	{
-		ShowNotification("You are on team " + ((myTeam != PunTeams.Team.blue) ? "RED" : "BLUE") + "(" + PhotonNetwork.playerList.Length + ")", blinking: false);
-	}
-
+	
 	public void Unpause(bool exiting = true)
 	{
-		if (exiting && PhotonNetwork.inRoom)
-		{
-			PhotonNetwork.LeaveRoom();
-		}
-		if (exiting)
-		{
-			AudioListener.volume = 0f;
-		}
-		else if (DataStore.GetInt("GameSound", 1) == 1)
-		{
-			AudioListener.volume = 1f;
-		}
 		Time.timeScale = 1f;
 		LoadingScreen.SetActive(exiting);
 		LoadingScreenLabel.text = "Going back home!";
 		PausePanel.SetActive(value: false);
 		CaptureTheFlagGameOverMessage.SetActive(value: false);
-		if (racingManager != null)
-		{
-			racingManager.SaveVehicleData();
-		}
+		
 		if (exiting)
 		{
 			SceneManager.LoadScene("Menu");
 		}
 	}
 
-	public void CaptureTheFlagGameOver(PunTeams.Team winningTeam, PunTeams.Team myTeam)
-	{
-		Camera.main.GetComponent<AudioListener>().enabled = false;
-		Time.timeScale = 0f;
-		CaptureTheFlagGameOverText.text = ((winningTeam != PunTeams.Team.blue) ? "RED" : "BLUE") + " WON!";
-		CaptureTheFlagGameOverMessage.SetActive(value: true);
-	}
-
 	public void HideEventLobby()
 	{
 		EventLobby.SetActive(value: false);
 	}
-
-	public void HideShowFinishWindow(bool Show, RoutePayment payment, long finishTime, long recordTime, int trailID, string recordKeeper)
-	{
-		FinishInfo.SetActive(Show);
-		StatsData statsData = GameState.LoadStatsData();
-		TimeSpan timeSpan = TimeSpan.FromSeconds((float)finishTime / 100f);
-		TimeSpan timeSpan2 = TimeSpan.FromSeconds((float)recordTime / 100f);
-		FinishTime.text = $"{timeSpan.Minutes:D2}:{timeSpan.Seconds:D2}.{timeSpan.Milliseconds / 10:00}";
-		RecordTimeFinished.text = $"{timeSpan2.Minutes:D2}:{timeSpan2.Seconds:D2}.{timeSpan2.Milliseconds / 10:00}";
-		TrailIDText.text = trailID.ToString();
-		RecordKeeperText.text = recordKeeper;
-		AwardLevel.text = payment.AwardLevelString();
-		MoneyWon.text = payment.Cash + ((!statsData.IsMember) ? string.Empty : "x3");
-		GoldWon.text = payment.Gold + payment.TrailblazerGoldBonus + ((!statsData.IsMember) ? string.Empty : "x3");
-		XPWon.text = payment.XP + ((!statsData.IsMember) ? string.Empty : "x3");
-		TrailblazerLabel.SetActive(payment.Trailblazer);
-		if (payment.Trailblazer)
-		{
-			ShowMessage("TRAILBLAZER! You were among the first to complete the route!\r\nGold Bonus: " + payment.TrailblazerGoldBonus.ToString() + ((!statsData.IsMember) ? string.Empty : "x3"));
-		}
-	}
-
+	
 	public void ToggleCarControls(bool Show)
 	{
 		ArrowControls.SetActive(Show && controlType == ControlType.Arrow);
 		TiltControls.SetActive(Show && controlType == ControlType.Tilt);
 		SteeringWheelControls.SetActive(Show && controlType == ControlType.SteeringWheel);
 		CarControlsEnabled = Show;
-	}
-
-	public void HideShoTrailRaceFinishWindow(bool Show, string ResultText, float raceTime, float opponentTime, string playerName, string opponentName)
-	{
-		TrailRaceFinishWindow.SetActive(Show);
-		TrailRaceResultText.text = ResultText;
-		PlayerName.text = playerName;
-		OpponentName.text = opponentName;
-		DateText.text = DateTime.Now.ToString("MM/dd/yyyy h:mm tt") + " " + Trails.GetByID(GameState.TrailID).TrailName;
-		TimeSpan timeSpan = TimeSpan.FromSeconds(raceTime);
-		TrailRaceMyTimeText.text = $"{timeSpan.Minutes:D2}:{timeSpan.Seconds:D2}.{timeSpan.Milliseconds / 10:00}";
-		if (raceTime == -1f)
-		{
-			TrailRaceMyTimeText.text = "Disqualified";
-		}
-		TimeSpan timeSpan2 = TimeSpan.FromSeconds(opponentTime);
-		if (opponentTime == 0f)
-		{
-			TrailRaceOpponentTimeText.text = "-----";
-		}
-		else if (opponentTime == -1f)
-		{
-			TrailRaceOpponentTimeText.text = "Disqualified";
-		}
-		else
-		{
-			TrailRaceOpponentTimeText.text = $"{timeSpan2.Minutes:D2}:{timeSpan2.Seconds:D2}.{timeSpan2.Milliseconds / 10:00}";
-		}
 	}
 
 	public void HidePlayerRouteInfo()
@@ -1172,27 +690,6 @@ public class CarUIControl : MonoBehaviour
 		return $"{timeSpan.Minutes:D2}:{timeSpan.Seconds:D2}.{timeSpan.Milliseconds / 10:00}";
 	}
 
-	public void DisplayPlayerRouteFinish()
-	{
-		if (!(playerRouteFinishWindow == null))
-		{
-			playerRouteFinishWindow.SetActive(value: true);
-		}
-	}
-
-	public void HidePlayerRouteFinish()
-	{
-		if (!(playerRouteFinishWindow == null))
-		{
-			playerRouteFinishWindow.SetActive(value: false);
-		}
-	}
-
-	public void HideShoTrailRaceFinishWindow(bool Show)
-	{
-		TrailRaceFinishWindow.SetActive(Show);
-	}
-
 	public void HideShowOfferRestartButton(bool Show)
 	{
 		OfferRestartButton.SetActive(Show);
@@ -1203,38 +700,17 @@ public class CarUIControl : MonoBehaviour
 		RestartOfferingWindow.SetActive(Show);
 	}
 
-	public void HideShowWaitForOtherPlayerButton(bool Show)
-	{
-		WaitForOtherPlayerButton.SetActive(Show);
-	}
-
-	public void HideShowSpectateButton(bool Show)
-	{
-		SpectateButton.SetActive(Show);
-	}
-
 	public void ToggleCarExtras(bool Show)
 	{
 		CarExtras.SetActive(Show);
 	}
 
-	public void ToggleWinchControls(bool Show)
-	{
-		WinchControls.SetActive(Show);
-	}
-
 	public void ShowNotification(string text, bool blinking)
 	{
-		notificationBlinking = blinking;
 		NotificationText.text = text;
 		Color color = NotificationText.color;
 		color.a = 1f;
 		NotificationText.color = color;
-	}
-
-	public void HideNotification()
-	{
-		notificationBlinking = false;
 	}
 
 	public void FlipCar()
@@ -1244,46 +720,7 @@ public class CarUIControl : MonoBehaviour
 
 	public void RespawnCar()
 	{
-		if (GameState.GameType != GameType.TrailRace)
-		{
-			carController.RespawnCar();
-		}
-	}
-
-	public void StartRace()
-	{
-		if (racingManager != null)
-		{
-			racingManager.StartRace();
-		}
-		if (PlayerRouteRacingManager.Instance != null)
-		{
-			PlayerRouteRacingManager.Instance.StartRace();
-		}
-	}
-
-	public void CancelRace()
-	{
-		if (racingManager != null)
-		{
-			racingManager.CancelRace();
-		}
-		if (PlayerRouteRacingManager.Instance != null)
-		{
-			PlayerRouteRacingManager.Instance.CancelRace();
-		}
-	}
-
-	public void Continue()
-	{
-		if (racingManager != null)
-		{
-			racingManager.Continue();
-		}
-		if (PlayerRouteRacingManager.Instance != null)
-		{
-			PlayerRouteRacingManager.Instance.Continue();
-		}
+		carController.RespawnCar();
 	}
 
 	public void GameOn()

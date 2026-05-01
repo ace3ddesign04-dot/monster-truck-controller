@@ -1,0 +1,298 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &100100000
+Prefab:
+  m_ObjectHideFlags: 1
+  serializedVersion: 2
+  m_Modification:
+    m_TransformParent: {fileID: 0}
+    m_Modifications: []
+    m_RemovedComponents: []
+  m_ParentPrefab: {fileID: 0}
+  m_RootGameObject: {fileID: 1791299880079143824}
+  m_IsPrefabParent: 1
+--- !u!4 &1791299880129475473
+Transform:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 100100000}
+  m_GameObject: {fileID: 1791299880079143824}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1791299880079143824
+GameObject:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 100100000}
+  serializedVersion: 5
+  m_Component:
+  - component: {fileID: 1791299880129475473}
+  - component: {fileID: 1791299881974969234}
+  m_Layer: 0
+  m_Name: "GasTruckBigBlock"
+  m_TagString:
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1791299881974969234
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 100100000}
+  m_GameObject: {fileID: 1791299880079143824}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 652edd083f4c822a4a6d4d6279e932b9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  RPM: 0
+  RPMLimit: 6000
+  idleClip: {fileID: 8300000, guid: e80d8171272f46408ad556278783f099, type: 3}
+  idleVolCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: 0
+      value: 0
+      inSlope: -0.06962456
+      outSlope: -0.06962456
+    - serializedVersion: 2
+      time: 0.004553209
+      value: 0.8891724
+      inSlope: -0.07838011
+      outSlope: -0.07838011
+    - serializedVersion: 2
+      time: 0.2024218
+      value: 0.522823
+      inSlope: -4.114168
+      outSlope: -4.114168
+    - serializedVersion: 2
+      time: 0.3464572
+      value: 0.0009543849
+      inSlope: 0
+      outSlope: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 0
+  idlePitchCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: -0.000705719
+      value: 0.5048218
+      inSlope: 1.498607
+      outSlope: 1.498607
+    - serializedVersion: 2
+      time: 1.002808
+      value: 2.008694
+      inSlope: 1.498607
+      outSlope: 1.498607
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 0
+  lowOffClip: {fileID: 8300000, guid: c7ab3f618ddb478ab8a117b143990e6e, type: 3}
+  lowOnClip: {fileID: 8300000, guid: 085fc84582a84d4db9d9fe97718aea3c, type: 3}
+  lowVolCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: 0.25
+      value: 0
+      inSlope: 4.936324
+      outSlope: 4.936324
+    - serializedVersion: 2
+      time: 0.3222465
+      value: 0.3924494
+      inSlope: 0
+      outSlope: 0
+    - serializedVersion: 2
+      time: 0.4
+      value: 0
+      inSlope: -10.32021
+      outSlope: -10.32021
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 0
+  lowPitchCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: 0
+      value: 0
+      inSlope: 3.8
+      outSlope: 3.8
+    - serializedVersion: 2
+      time: 1
+      value: 3.8
+      inSlope: 3.8
+      outSlope: 3.8
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 0
+  medOffClip: {fileID: 8300000, guid: 8810775aef12414d93f41ff0bbed125c, type: 3}
+  medOnClip: {fileID: 8300000, guid: dd3740fc81b04e96852320b2da27879d, type: 3}
+  medVolCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: 0.3501113
+      value: -0.001354984
+      inSlope: 4.674728
+      outSlope: 4.674728
+    - serializedVersion: 2
+      time: 0.3682693
+      value: 0.2410773
+      inSlope: 4.506707
+      outSlope: 4.506707
+    - serializedVersion: 2
+      time: 0.4580713
+      value: 0.3804367
+      inSlope: 0.2221733
+      outSlope: 0.2221733
+    - serializedVersion: 2
+      time: 0.65
+      value: 0
+      inSlope: -2.071215
+      outSlope: -2.071215
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 0
+  medPitchCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: 0.19797
+      value: 0.6557167
+      inSlope: 1.638294
+      outSlope: 1.638294
+    - serializedVersion: 2
+      time: 1
+      value: 2.4
+      inSlope: 1.493238
+      outSlope: 1.493238
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 0
+  highOffClip: {fileID: 8300000, guid: e211ad32f41844048e554df320ef3f0d, type: 3}
+  highOnClip: {fileID: 8300000, guid: 30d874e578414dce84b2d660f6967d45, type: 3}
+  highVolCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: 0
+      value: 0.001246214
+      inSlope: 0
+      outSlope: 0
+    - serializedVersion: 2
+      time: 0.4366505
+      value: 0.8230992
+      inSlope: 1.038406
+      outSlope: 1.038406
+    - serializedVersion: 2
+      time: 0.9918706
+      value: 0.9939755
+      inSlope: 0
+      outSlope: 0
+    - serializedVersion: 2
+      time: 1.118741
+      value: 0.8496951
+      inSlope: Infinity
+      outSlope: Infinity
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 0
+  highPitchCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: 0.206325
+      value: 0.2452046
+      inSlope: 1.02555
+      outSlope: 1.02555
+    - serializedVersion: 2
+      time: 1
+      value: 1.2
+      inSlope: 0.867591
+      outSlope: 0.867591
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 0
+  maxRPMClip: {fileID: 8300000, guid: 8c4e179746fc48e4a431bd10720eff0b, type: 3}
+  maxRPMVolCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: 0.9916018
+      value: 0
+      inSlope: Infinity
+      outSlope: Infinity
+    - serializedVersion: 2
+      time: 0.9918706
+      value: 1
+      inSlope: 1.593285
+      outSlope: 1.593285
+    - serializedVersion: 2
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 0
+  maxRPMPitchCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: 0
+      value: 1.2
+      inSlope: 0
+      outSlope: 0
+    - serializedVersion: 2
+      time: 1
+      value: 1.2
+      inSlope: 0
+      outSlope: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 0
+  turboClip: {fileID: 8300000, guid: f683ea30b69342afb318c79f12ceba5b, type: 3}
+  turboVolCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+    - serializedVersion: 2
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  turboPitchCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 2
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+    - serializedVersion: 2
+      time: 1
+      value: 2
+      inSlope: 0
+      outSlope: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  load: 0
+  RevLimiterAllowed: 0
+  Turbo: 1
