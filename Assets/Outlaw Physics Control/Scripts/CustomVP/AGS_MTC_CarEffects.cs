@@ -7,7 +7,7 @@ namespace AGS_MonsterTruckControl
 
 		private AGS_MTC_CarController carController;
 
-		private EngineController engine;
+		private AGS_MTC_EngineController engine;
 
 		private AudioSource HitSound;
 
@@ -41,7 +41,7 @@ namespace AGS_MonsterTruckControl
 		private void Awake()
 		{
 			carController = GetComponent<AGS_MTC_CarController>();
-			engine = GetComponent<EngineController>();
+			engine = GetComponent<AGS_MTC_EngineController>();
 		}
 
 		private void LoadResources()

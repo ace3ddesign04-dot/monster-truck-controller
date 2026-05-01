@@ -263,32 +263,10 @@ public class CarUIControl : MonoBehaviour
 	public Font font;
 
 	public AGS_MTC_CarController carController;
-	//private CarController carController
-	//{
-	//	get
-	//	{
-	//		if (VehicleLoader.Instance != null)
-	//		{
-	//			return VehicleLoader.Instance.playerCarController;
-	//		}
-	//		return null;
-	//	}
-	//}
 
-	public EngineController engine;
-	//private EngineController engine
-	//{
-	//	get
-	//	{
-	//		if (VehicleLoader.Instance != null)
-	//		{
-	//			return VehicleLoader.Instance.playerEngine;
-	//		}
-	//		return null;
-	//	}
-	//}
+	public AGS_MTC_EngineController engine;
 
-	private CameraController camController => CameraController.Instance;
+	private AGS_MTC_CameraController camController => AGS_MTC_CameraController.Instance;
 
 	private void Awake()
 	{

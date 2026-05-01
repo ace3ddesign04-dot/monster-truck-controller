@@ -2144,7 +2144,7 @@ namespace AGS_MonsterTruckControl {
 
         private CarUIControl carUIControl;
 
-        private EngineController engine;
+        private AGS_MTC_EngineController engine;
 
         [Header("Setup")][SerializeField] public List<AGS_MTC_Wheel> wheels;
 
@@ -2264,9 +2264,9 @@ namespace AGS_MonsterTruckControl {
 
         public AGS_MTC_TransmissionType transmissionType;
 
-        public float[] GearRatios = GearsManager.DefaultGears;
+        public float[] GearRatios = AGS_MTC_GearsManager.DefaultGears;
 
-        public float LowGearRatio = GearsManager.DefaultLowGear;
+        public float LowGearRatio = AGS_MTC_GearsManager.DefaultLowGear;
 
         public int MaxGear = 5;
 
@@ -2429,8 +2429,7 @@ namespace AGS_MonsterTruckControl {
 
             carUIControl = FindObjectOfType<CarUIControl>();
             m_Rigidbody = GetComponent<Rigidbody>();
-            //bodyPartsSwitcher = GetComponent<BodyPartsSwitcher>();
-            engine = GetComponent<EngineController>();
+            engine = GetComponent<AGS_MTC_EngineController>();
             lowestPointOfCollider = Vector3.zero;
             lowestPointOfCollider =
                 BodyColliders[0].ClosestPoint(BodyColliders[0].transform.position - transform.up * 10f);
@@ -3022,11 +3021,11 @@ namespace AGS_MonsterTruckControl {
         }
 
         public float GetMaxTorque() {
-            PowerPart part = PowerParts.GetPart(vehicleType, PowerPartType.EngineBlock, EngineBlockStage);
-            PowerPart part2 = PowerParts.GetPart(vehicleType, PowerPartType.Head, HeadStage);
-            PowerPart part3 = PowerParts.GetPart(vehicleType, PowerPartType.Valvetrain, ValvetrainStage);
-            PowerPart part4 = PowerParts.GetPart(vehicleType, PowerPartType.Turbo, TurboStage);
-            PowerPart part5 = PowerParts.GetPart(vehicleType, PowerPartType.Blower, BlowerStage);
+            AGS_MTC_PowerPart part = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.EngineBlock, EngineBlockStage);
+            AGS_MTC_PowerPart part2 = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.Head, HeadStage);
+            AGS_MTC_PowerPart part3 = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.Valvetrain, ValvetrainStage);
+            AGS_MTC_PowerPart part4 = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.Turbo, TurboStage);
+            AGS_MTC_PowerPart part5 = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.Blower, BlowerStage);
             float num = 0f;
             if (part != null) {
                 num += part.IncrementPercantage;
@@ -3063,13 +3062,13 @@ namespace AGS_MonsterTruckControl {
         }
 
         private void UpdateMotorPower() {
-            PowerPart part = PowerParts.GetPart(vehicleType, PowerPartType.EngineBlock, EngineBlockStage);
-            PowerPart part2 = PowerParts.GetPart(vehicleType, PowerPartType.Head, HeadStage);
-            PowerPart part3 = PowerParts.GetPart(vehicleType, PowerPartType.Valvetrain, ValvetrainStage);
-            PowerPart part4 = PowerParts.GetPart(vehicleType, PowerPartType.Weight, WeightStage);
-            PowerPart part5 = PowerParts.GetPart(vehicleType, PowerPartType.Weight, DurabilityStage);
-            PowerPart part6 = PowerParts.GetPart(vehicleType, PowerPartType.Turbo, TurboStage);
-            PowerPart part7 = PowerParts.GetPart(vehicleType, PowerPartType.Blower, BlowerStage);
+            AGS_MTC_PowerPart part = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.EngineBlock, EngineBlockStage);
+            AGS_MTC_PowerPart part2 = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.Head, HeadStage);
+            AGS_MTC_PowerPart part3 = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.Valvetrain, ValvetrainStage);
+            AGS_MTC_PowerPart part4 = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.Weight, WeightStage);
+            AGS_MTC_PowerPart part5 = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.Weight, DurabilityStage);
+            AGS_MTC_PowerPart part6 = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.Turbo, TurboStage);
+            AGS_MTC_PowerPart part7 = AGS_MTC_PowerParts.GetPart(vehicleType, AGS_MTC_PowerPartType.Blower, BlowerStage);
             FinalTorquePercentage = 0f;
             if (part != null) {
                 FinalTorquePercentage += part.IncrementPercantage;
@@ -3542,7 +3541,7 @@ namespace AGS_MonsterTruckControl {
         private void DoWaterDamage(float Value) {
             CarHealth = Mathf.Clamp(CarHealth - Value, 0f, 100f);
             // TODO: notify water damage
-            CameraController.Instance.Shake();
+            AGS_MTC_CameraController.Instance.Shake();
         }
 
         private void CheckOverheating() {
@@ -3568,7 +3567,7 @@ namespace AGS_MonsterTruckControl {
         private void DoOverheatDamage(float Value) {
             CarHealth = Mathf.Clamp(CarHealth - Value, 0f, 100f);
             // TODO: notify overheating
-            CameraController.Instance.Shake();
+            AGS_MTC_CameraController.Instance.Shake();
         }
     }
 }
