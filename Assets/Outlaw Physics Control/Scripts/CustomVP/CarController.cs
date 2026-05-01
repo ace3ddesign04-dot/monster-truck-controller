@@ -6,6 +6,7 @@ using UnityStandardAssets.CrossPlatformInput;
 
 namespace CustomVP {
     public class CarController : MonoBehaviour {
+        [System.Serializable] public class IntUnityEvent : UnityEvent<int> { }
 
         #region Stunt Events
         [Header("Stunt Events")]
@@ -22,6 +23,19 @@ namespace CustomVP {
         public UnityEvent OnSideSelfRightRecovered;
         public UnityEvent OnAutoBackflipLanded;
 
+        public IntUnityEvent OnUserFrontFlip;
+        public IntUnityEvent OnUserBackFlip;
+
+        private int userFrontFlipCount = 0;
+        private int userBackFlipCount = 0;
+
+        private Vector3 userFlipReferenceForward = Vector3.forward;
+        private Vector3 userFlipReferenceRight = Vector3.right;
+
+        private float userFlipLastPitch = 0f;
+        private float userFlipUnwrappedPitch = 0f;
+        private bool userFlipHasReference = false;
+
         private bool wheelieEventPrevState = false;
         private bool noseWheelieEventPrevState = false;
         private bool sideWheelieEventPrevState = false;
@@ -33,6 +47,104 @@ namespace CustomVP {
         private bool donutStateActive = false;
         private float donutAccumulatedYaw = 0f;
         private Vector3 donutPrevForwardFlat = Vector3.zero;
+
+        private void ResetUserAirFlipEvents() {
+            userFrontFlipCount = 0;
+            userBackFlipCount = 0;
+
+            userFlipReferenceForward = Vector3.forward;
+            userFlipReferenceRight = Vector3.right;
+
+            userFlipLastPitch = 0f;
+            userFlipUnwrappedPitch = 0f;
+            userFlipHasReference = false;
+        }
+
+        private void SetupUserFlipReference() {
+            // Use actual travel direction first.
+            Vector3 flatForward = Vector3.ProjectOnPlane(m_Rigidbody.velocity, Vector3.up);
+
+            if (flatForward.sqrMagnitude < 0.25f) {
+                flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            }
+
+            if (flatForward.sqrMagnitude < 0.001f) {
+                flatForward = Vector3.ProjectOnPlane(transform.up, Vector3.up);
+            }
+
+            if (flatForward.sqrMagnitude < 0.001f) {
+                flatForward = Vector3.forward;
+            }
+
+            userFlipReferenceForward = flatForward.normalized;
+
+            userFlipReferenceRight = Vector3.Cross(Vector3.up, userFlipReferenceForward);
+
+            if (userFlipReferenceRight.sqrMagnitude < 0.001f) {
+                userFlipReferenceRight = transform.right;
+            }
+
+            userFlipReferenceRight.Normalize();
+
+            userFlipLastPitch = GetGroundAlignedPitchAngleDegrees();
+            userFlipUnwrappedPitch = userFlipLastPitch;
+
+            userFlipHasReference = true;
+        }
+
+        private float GetGroundAlignedPitchAngleDegrees() {
+            Vector3 fwdOnPitchPlane =
+                Vector3.ProjectOnPlane(transform.forward, userFlipReferenceRight);
+
+            if (fwdOnPitchPlane.sqrMagnitude < 0.001f) {
+                return userFlipLastPitch;
+            }
+
+            fwdOnPitchPlane.Normalize();
+
+            // Fixed reference:
+            // 0 = aligned with ground/reference forward.
+            // +360 or -360 = completed flip while aligned back to ground.
+            return Vector3.SignedAngle(
+                userFlipReferenceForward,
+                fwdOnPitchPlane,
+                userFlipReferenceRight
+            );
+        }
+
+        private void UpdateUserAirFlipEvents(bool airborne) {
+            // Do not count assisted auto-backflip as user flip.
+            if (autoBackflipActive || autoBackflipLandingCatchActive) {
+                return;
+            }
+
+            if (!airborne) {
+                ResetUserAirFlipEvents();
+                return;
+            }
+
+            if (!userFlipHasReference) {
+                SetupUserFlipReference();
+                return;
+            }
+
+            float currentPitch = GetGroundAlignedPitchAngleDegrees();
+
+            float delta = Mathf.DeltaAngle(userFlipLastPitch, currentPitch);
+            userFlipLastPitch = currentPitch;
+
+            userFlipUnwrappedPitch += delta;
+
+            while (userFlipUnwrappedPitch >= 355f * (userFrontFlipCount + 1)) {
+                userFrontFlipCount++;
+                OnUserFrontFlip?.Invoke(userFrontFlipCount);
+            }
+
+            while (userFlipUnwrappedPitch <= -355f * (userBackFlipCount + 1)) {
+                userBackFlipCount++;
+                OnUserBackFlip?.Invoke(userBackFlipCount);
+            }
+        }
 
         private void UpdateAutoBackflipLandingEvent() {
             bool autoBackflipRunning = autoBackflipActive || autoBackflipLandingCatchActive;
@@ -2308,6 +2420,8 @@ namespace CustomVP {
             OnNoseWheelieEnter.AddListener(() => { print("Stunt: -=> Nose Wheelie Entered"); });
             OnNoseWheelieExit.AddListener(() => { print("Stunt: -=> Nose Wheelie Exit"); });
             OnAutoBackflipLanded.AddListener(() => { print("Stunt: -=> Auto Backflip Landed On All Tires"); });
+            OnUserFrontFlip.AddListener((count) => { print("Stunt: -=> User Front Flip x" + count); });
+            OnUserBackFlip.AddListener((count) => { print("Stunt: -=> User Back Flip x" + count); });
 
             if (comBase != null) {
                 manualCenterOfMass = comBase.localPosition;
@@ -2809,6 +2923,8 @@ namespace CustomVP {
                 FlyingTime = 0f;
             }
 
+            UpdateUserAirFlipEvents(flag);
+
             if (flag && UpdateAutoBackflip()) {
                 return;
             }
@@ -3114,17 +3230,6 @@ namespace CustomVP {
         private void DoInput() {
             xInput = Input.GetAxis("Horizontal") + CrossPlatformInputManager.GetAxis("Horizontal");
             yInput = Input.GetAxis("Vertical") + CrossPlatformInputManager.GetAxis("Vertical");
-
-#if UNITY_EDITOR
-            Debug.Log("xInput " + xInput);
-            Debug.Log("yInput " + yInput);
-#endif
-
-            // if (!Application.isEditor)
-            //     if (Input.touchCount == 0)
-            //     {
-            //         yInput = 0f;
-            //     }
 
             if (CrossPlatformInputManager.GetButtonDown("SetDiffLock0")) {
                 SetDiffLock(0);
