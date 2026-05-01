@@ -3115,17 +3115,6 @@ namespace CustomVP {
             xInput = Input.GetAxis("Horizontal") + CrossPlatformInputManager.GetAxis("Horizontal");
             yInput = Input.GetAxis("Vertical") + CrossPlatformInputManager.GetAxis("Vertical");
 
-#if UNITY_EDITOR
-            Debug.Log("xInput " + xInput);
-            Debug.Log("yInput " + yInput);
-#endif
-
-            // if (!Application.isEditor)
-            //     if (Input.touchCount == 0)
-            //     {
-            //         yInput = 0f;
-            //     }
-
             if (CrossPlatformInputManager.GetButtonDown("SetDiffLock0")) {
                 SetDiffLock(0);
             }
