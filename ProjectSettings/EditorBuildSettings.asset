@@ -24,6 +24,6 @@ EditorBuildSettings:
     path: Assets/Outlaw Physics Control/Scenes/Maps/Publish/MapWoodlandsV2NG.unity
     guid: 548763c6b6e713a4fa815137ace2ddfc
   - enabled: 1
-    path: Assets/Outlaw Physics Control/my controller scene.unity
-    guid: 2c20378a830b6854ab61631685982bc3
+    path: Assets/Outlaw Physics Control/my controller.unity
+    guid: c63d8c4fc0d984745a461270a62938fb
   m_configObjects: {}
