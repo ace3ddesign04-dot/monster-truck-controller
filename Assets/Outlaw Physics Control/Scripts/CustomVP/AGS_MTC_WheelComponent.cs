@@ -1,8 +1,8 @@
 using UnityEngine;
 
-namespace CustomVP
+namespace AGS_MonsterTruckControl
 {
-	public class WheelComponent : MonoBehaviour
+	public class AGS_MTC_WheelComponent : MonoBehaviour
 	{
 		private Rigidbody rigidBody;
 
@@ -12,7 +12,7 @@ namespace CustomVP
 
 		public float wheelMass = 1f;
 
-		public WheelSweepType sweepType;
+		public AGS_MTC_WheelSweepType sweepType;
 
 		[Header("Springs")]
 		public float travel = 0.5f;
@@ -80,7 +80,7 @@ namespace CustomVP
 		public bool IsGrounded;
 
 		[HideInInspector]
-		public WheelCollider wheelCollider;
+		public AGS_MTC_WheelCollider wheelCollider;
 
 		[HideInInspector]
 		public float MotorTorque;
@@ -112,7 +112,7 @@ namespace CustomVP
 		public void Start()
 		{
 			rigidBody = GetComponentInParent<Rigidbody>();
-			wheelCollider = base.gameObject.AddComponent<WheelCollider>();
+			wheelCollider = base.gameObject.AddComponent<AGS_MTC_WheelCollider>();
 			wheelCollider.rb = rigidBody;
 			SpherecastProtector = new GameObject("SpherecastProtector").AddComponent<SphereCollider>();
 			SpherecastProtector.transform.parent = base.gameObject.transform;
@@ -196,8 +196,8 @@ namespace CustomVP
 			wheelCollider.forwardFrictionCoefficient = forwardFrictionCoefficient;
 			wheelCollider.sideFrictionCoefficient = sideFrictionCoefficient;
 			wheelCollider.surfaceFrictionCoefficient = surfaceFrictionCoefficient;
-			wheelCollider.forwardFrictionCurve = new CustomWheelFrictionCurve(f_extSlip, f_extVal, f_asSlip, f_asVal, f_tailVal);
-			wheelCollider.sidewaysFrictionCurve = new CustomWheelFrictionCurve(s_extSlip, s_extVal, s_asSlip, s_asVal, s_tailVal);
+			wheelCollider.forwardFrictionCurve = new AGS_MTC_WheelFrictionCurve(f_extSlip, f_extVal, f_asSlip, f_asVal, f_tailVal);
+			wheelCollider.sidewaysFrictionCurve = new AGS_MTC_WheelFrictionCurve(s_extSlip, s_extVal, s_asSlip, s_asVal, s_tailVal);
 		}
 
 		private void OnDrawGizmos()

@@ -1,4 +1,4 @@
-using CustomVP;
+using AGS_MonsterTruckControl;
 using UnityEngine;
 using UnityStandardAssets.CrossPlatformInput;
 
@@ -15,7 +15,7 @@ public class EngineController : MonoBehaviour
     [HideInInspector]
     public bool Diesel;
 
-    private CarController _orcTruckController;
+    private AGS_MTC_CarController _orcTruckController;
 
     public ORC_EngineSounds orcEngineSounds;
 
@@ -105,7 +105,7 @@ public class EngineController : MonoBehaviour
     }
 
     private void Awake() {
-        _orcTruckController = GetComponent<CarController>();
+        _orcTruckController = GetComponent<AGS_MTC_CarController>();
         if (ThrottleValve != null && ThrottleValve.t != null) {
             ThrottleValveDefaultRotation = ThrottleValve.t.localEulerAngles;
         }
@@ -140,7 +140,7 @@ public class EngineController : MonoBehaviour
             Turbo = true;
             orcEngineSounds.Turbo = true;
         }
-        else if (_orcTruckController.vehicleType == VehicleType.Truck) {
+        else if (_orcTruckController.vehicleType == AGS_MTC_VehicleType.Truck) {
             if (_orcTruckController.EngineBlockStage >= 2) {
                 orcEngineSounds = ((GameObject)UnityEngine.Object.Instantiate(Resources.Load("Sounds/GasTruckBigBlock"), base.transform.position, Quaternion.identity, base.transform)).GetComponent<ORC_EngineSounds>();
             }
@@ -150,12 +150,12 @@ public class EngineController : MonoBehaviour
             Turbo = PurchasedTurbo;
             orcEngineSounds.Turbo = PurchasedTurbo;
         }
-        else if (_orcTruckController.vehicleType == VehicleType.SideBySide) {
+        else if (_orcTruckController.vehicleType == AGS_MTC_VehicleType.SideBySide) {
             orcEngineSounds = ((GameObject)UnityEngine.Object.Instantiate(Resources.Load("Sounds/SideBySide"), base.transform.position, Quaternion.identity, base.transform)).GetComponent<ORC_EngineSounds>();
             Turbo = false;
             orcEngineSounds.Turbo = false;
         }
-        else if (_orcTruckController.vehicleType == VehicleType.Crawler) {
+        else if (_orcTruckController.vehicleType == AGS_MTC_VehicleType.Crawler) {
             orcEngineSounds = ((GameObject)UnityEngine.Object.Instantiate(Resources.Load("Sounds/Crawler"), base.transform.position, Quaternion.identity, base.transform)).GetComponent<ORC_EngineSounds>();
             Turbo = false;
             orcEngineSounds.Turbo = false;
@@ -248,7 +248,7 @@ public class EngineController : MonoBehaviour
             return;
         }
         int gear = Gear;
-        if (_orcTruckController != null && _orcTruckController.transmissionType == TransmissionType.Manual) {
+        if (_orcTruckController != null && _orcTruckController.transmissionType == AGS_MTC_TransmissionType.Manual) {
             if (CrossPlatformInputManager.GetButtonDown("ShiftUp") && Gear + 1 < MaxGear) {
                 ShiftGear(Up: true);
             }
@@ -260,7 +260,7 @@ public class EngineController : MonoBehaviour
         if (_orcTruckController == null) {
             flag = true;
         }
-        if (_orcTruckController != null && _orcTruckController.transmissionType == TransmissionType.AT) {
+        if (_orcTruckController != null && _orcTruckController.transmissionType == AGS_MTC_TransmissionType.AT) {
             flag = true;
         }
         if (flag) {

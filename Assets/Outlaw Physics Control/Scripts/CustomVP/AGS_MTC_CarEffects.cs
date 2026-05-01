@@ -1,11 +1,11 @@
 using UnityEngine;
 
-namespace CustomVP
+namespace AGS_MonsterTruckControl
 {
-	public class CarEffects : MonoBehaviour
+	public class AGS_MTC_CarEffects : MonoBehaviour
 	{
 
-		private CarController carController;
+		private AGS_MTC_CarController carController;
 
 		private EngineController engine;
 
@@ -40,7 +40,7 @@ namespace CustomVP
 
 		private void Awake()
 		{
-			carController = GetComponent<CarController>();
+			carController = GetComponent<AGS_MTC_CarController>();
 			engine = GetComponent<EngineController>();
 		}
 
@@ -102,7 +102,7 @@ namespace CustomVP
 		{
 			if (!(WheelBumpSound == null))
 			{
-				foreach (_Wheel wheel in carController.wheels)
+				foreach (AGS_MTC_Wheel wheel in carController.wheels)
 				{
 					if (wheel.wc.deltaCompression > 0.1f * MinWheelBumpValue && wheel.wc.wheelCollider.isGrounded && !WheelBumpSound.isPlaying)
 					{
@@ -135,7 +135,7 @@ namespace CustomVP
 				bool flag2 = false;
 				bool flag3 = false;
 				
-				foreach (_Wheel wheel in carController.wheels)
+				foreach (AGS_MTC_Wheel wheel in carController.wheels)
 				{
 					if (wheel.wc.sLong > num2 && wheel.wc.wheelCollider.isGrounded)
 					{

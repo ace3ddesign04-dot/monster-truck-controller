@@ -1,12 +1,12 @@
 using System;
 using UnityEngine;
 
-namespace CustomVP
+namespace AGS_MonsterTruckControl
 {
 	[Serializable]
-	public class _Wheel
+	public class AGS_MTC_Wheel
 	{
-		public WheelComponent wc;
+		public AGS_MTC_WheelComponent wc;
 
 		[HideInInspector]
 		public bool steer;

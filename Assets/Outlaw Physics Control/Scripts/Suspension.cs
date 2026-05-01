@@ -1,4 +1,4 @@
-using CustomVP;
+using AGS_MonsterTruckControl;
 using UnityEngine;
 
 public class Suspension : MonoBehaviour
@@ -16,7 +16,7 @@ public class Suspension : MonoBehaviour
 	[HideInInspector]
 	public Side side;
 
-	public WheelComponent[] wheelColliders;
+	public AGS_MTC_WheelComponent[] wheelColliders;
 
 	public Transform[] Raycasters;
 

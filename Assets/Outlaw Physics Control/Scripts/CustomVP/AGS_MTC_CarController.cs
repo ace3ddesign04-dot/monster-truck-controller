@@ -4,8 +4,8 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityStandardAssets.CrossPlatformInput;
 
-namespace CustomVP {
-    public class CarController : MonoBehaviour {
+namespace AGS_MonsterTruckControl {
+    public class AGS_MTC_CarController : MonoBehaviour {
         [System.Serializable] public class IntUnityEvent : UnityEvent<int> { }
 
         #region Stunt Events
@@ -269,7 +269,7 @@ namespace CustomVP {
         }
         #endregion
 
-        public VehicleType vehicleType;
+        public AGS_MTC_VehicleType vehicleType;
         public bool vehicleIsActive;
 
         #region Nose Wheeling
@@ -2146,7 +2146,7 @@ namespace CustomVP {
 
         private EngineController engine;
 
-        [Header("Setup")][SerializeField] public List<_Wheel> wheels;
+        [Header("Setup")][SerializeField] public List<AGS_MTC_Wheel> wheels;
 
         public Collider[] BodyColliders;
 
@@ -2262,7 +2262,7 @@ namespace CustomVP {
 
         [HideInInspector] public bool TankTracksPurchased;
 
-        public TransmissionType transmissionType;
+        public AGS_MTC_TransmissionType transmissionType;
 
         public float[] GearRatios = GearsManager.DefaultGears;
 
@@ -2335,9 +2335,9 @@ namespace CustomVP {
 
         [HideInInspector] public int RearInstalledTiresID;
 
-        public FrictionSettings FrontFriction;
+        public AGS_MTC_FrictionSettings FrontFriction;
 
-        public FrictionSettings RearFriction;
+        public AGS_MTC_FrictionSettings RearFriction;
 
         public AnimationCurve frontSpringCurve = new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(1f, 1f));
 
@@ -2447,8 +2447,8 @@ namespace CustomVP {
 
             lowestPointOfCollider = transform.InverseTransformPoint(lowestPointOfCollider);
             SetCalculatedCOM();
-            CarController[] array = FindObjectsOfType<CarController>();
-            foreach (CarController carController in array) {
+            AGS_MTC_CarController[] array = FindObjectsOfType<AGS_MTC_CarController>();
+            foreach (AGS_MTC_CarController carController in array) {
                 if (carController != this && carController.enabled) {
                     enabled = false;
                     return;
@@ -2517,11 +2517,11 @@ namespace CustomVP {
             }
 
             IsSlideThrottle = false;
-            CarController[] array2 = FindObjectsOfType<CarController>();
+            AGS_MTC_CarController[] array2 = FindObjectsOfType<AGS_MTC_CarController>();
             int num = 0;
             while (true) {
                 if (num < array2.Length) {
-                    CarController carController2 = array2[num];
+                    AGS_MTC_CarController carController2 = array2[num];
                     if (carController2 != this && carController2.enabled) {
                         break;
                     }
@@ -2556,7 +2556,7 @@ namespace CustomVP {
         }
 
         private void OnDisable() {
-            foreach (_Wheel wheel in wheels) {
+            foreach (AGS_MTC_Wheel wheel in wheels) {
                 wheel.wc.BrakeTorque = BrakeTorque;
                 wheel.wc.MotorTorque = 0f;
             }
@@ -2572,7 +2572,7 @@ namespace CustomVP {
             }
 
             if (!vehicleIsActive) {
-                foreach (_Wheel wheel in wheels) {
+                foreach (AGS_MTC_Wheel wheel in wheels) {
                     wheel.wc.MotorTorque = 0f;
                     wheel.wc.BrakeTorque = BrakeTorque;
                 }
@@ -2784,7 +2784,7 @@ namespace CustomVP {
             if (wheels.Count < 4)
                 return;
 
-            foreach (_Wheel wheel in wheels) {
+            foreach (AGS_MTC_Wheel wheel in wheels) {
                 if (wheel.wc == null || wheel.wc.wheelCollider == null)
                     return;
             }
@@ -3006,7 +3006,7 @@ namespace CustomVP {
         }
 
         public void SetZeroFriction() {
-            foreach (_Wheel wheel in wheels) {
+            foreach (AGS_MTC_Wheel wheel in wheels) {
                 wheel.wc.forwardFrictionCoefficient =
                     (wheel.wc.sideFrictionCoefficient = (wheel.wc.surfaceFrictionCoefficient = 0f));
                 wheel.wc.UpdateFriction();
@@ -3014,7 +3014,7 @@ namespace CustomVP {
         }
 
         public void SetDefaultFriction() {
-            foreach (_Wheel wheel in wheels) {
+            foreach (AGS_MTC_Wheel wheel in wheels) {
                 wheel.wc.forwardFrictionCoefficient =
                     (wheel.wc.sideFrictionCoefficient = (wheel.wc.surfaceFrictionCoefficient = 1f));
                 wheel.wc.UpdateFriction();
@@ -3157,7 +3157,7 @@ namespace CustomVP {
         }
 
         private void SetDiffLock() {
-            foreach (_Wheel wheel in wheels) {
+            foreach (AGS_MTC_Wheel wheel in wheels) {
                 if (wheel.wc.wheelCollider == null) {
                     return;
                 }
@@ -3270,7 +3270,7 @@ namespace CustomVP {
 
             float targetBrake = 0f;
 
-            if (!abruptReverseToForward && (Speed > 1f || transmissionType == TransmissionType.Manual)) {
+            if (!abruptReverseToForward && (Speed > 1f || transmissionType == AGS_MTC_TransmissionType.Manual)) {
                 targetBrake = -Mathf.Clamp(yInput, -1f, 0f);
             }
 
@@ -3283,11 +3283,11 @@ namespace CustomVP {
             float throttleInput = abruptReverseToForward ? 1f : yInput;
 
             if (!abruptReverseToForward &&
-                ((Speed > 1f && Grounded()) || transmissionType == TransmissionType.Manual)) {
+                ((Speed > 1f && Grounded()) || transmissionType == AGS_MTC_TransmissionType.Manual)) {
                 throttleInput = Mathf.Clamp(yInput, 0f, 1f);
             }
 
-            if (transmissionType == TransmissionType.Manual && engine.ReverseGear) {
+            if (transmissionType == AGS_MTC_TransmissionType.Manual && engine.ReverseGear) {
                 throttleInput = -throttleInput;
             }
 
@@ -3411,7 +3411,7 @@ namespace CustomVP {
             currentBrakeTorque = BrakeTorque * Braking;
 
             for (int i = 0; i < wheels.Count; i++) {
-                _Wheel wheel = wheels[i];
+                AGS_MTC_Wheel wheel = wheels[i];
 
                 if (wheel.wc == null || wheel.wc.wheelCollider == null) {
                     break;

@@ -1,4 +1,4 @@
-using CustomVP;
+using AGS_MonsterTruckControl;
 using UnityEngine;
 
 public class ORC_EngineSounds : MonoBehaviour
@@ -85,11 +85,11 @@ public class ORC_EngineSounds : MonoBehaviour
 
 	private bool SoundsDestroyed;
 
-	private CarController _orcTruckController;
+	private AGS_MTC_CarController _orcTruckController;
 
 	private void Start()
 	{
-		_orcTruckController = GetComponentInParent<CarController>();
+		_orcTruckController = GetComponentInParent<AGS_MTC_CarController>();
 		LoadSounds();
 	}
 

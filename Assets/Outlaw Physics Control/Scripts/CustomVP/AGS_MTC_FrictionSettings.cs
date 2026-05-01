@@ -1,10 +1,10 @@
 using System;
 using UnityEngine;
 
-namespace CustomVP
+namespace AGS_MonsterTruckControl
 {
 	[Serializable]
-	public class FrictionSettings
+	public class AGS_MTC_FrictionSettings
 	{
 		[Header("Forward friction")]
 		public float f_ExtremumSlip = 0.06f;

@@ -1,8 +1,8 @@
 using UnityEngine;
 
-namespace CustomVP
+namespace AGS_MonsterTruckControl
 {
-	public class CustomWheelFrictionCurve
+	public class AGS_MTC_WheelFrictionCurve
 	{
 		private AnimationCurve curveData;
 
@@ -85,12 +85,12 @@ namespace CustomVP
 
 		public float max => Mathf.Max(asVal, extVal);
 
-		public CustomWheelFrictionCurve()
+		public AGS_MTC_WheelFrictionCurve()
 			: this(0.06f, 1.2f, 0.08f, 1f, 0.6f)
 		{
 		}
 
-		public CustomWheelFrictionCurve(float extSlip, float extVal, float asSlip, float asVal, float tailVal)
+		public AGS_MTC_WheelFrictionCurve(float extSlip, float extVal, float asSlip, float asVal, float tailVal)
 		{
 			keyframes = new Keyframe[4];
 			curveData = new AnimationCurve();

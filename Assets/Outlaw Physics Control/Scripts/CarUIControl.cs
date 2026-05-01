@@ -1,4 +1,4 @@
-using CustomVP;
+using AGS_MonsterTruckControl;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -70,8 +70,6 @@ public class CarUIControl : MonoBehaviour
 	public GameObject CaptureTheFlagGameOverMessage;
 
 	public Text CaptureTheFlagGameOverText;
-
-	public GameObject PasswordPanel;
 
 	public Text MapPassword;
 
@@ -264,7 +262,7 @@ public class CarUIControl : MonoBehaviour
 
 	public Font font;
 
-	public CarController carController;
+	public AGS_MTC_CarController carController;
 	//private CarController carController
 	//{
 	//	get
@@ -312,7 +310,6 @@ public class CarUIControl : MonoBehaviour
 		HideEventLobby();
 		HideShowCountdown(Show: false);
 		SwitchFlipButton(Show: false);
-		PasswordPanel.SetActive(value: false);
 		RepairWindow.SetActive(value: false);
 		
 		GameObject[] touchAccelerators = TouchAccelerators;

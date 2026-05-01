@@ -1,10 +1,10 @@
-using CustomVP;
+using AGS_MonsterTruckControl;
 using System;
 using UnityEngine;
 
 public class SolidAxleRearSuspension : Suspension
 {
-	private CarController carController;
+	private AGS_MTC_CarController carController;
 
     private Quaternion rlSteeringAxleBaseRotation;
     private Quaternion rrSteeringAxleBaseRotation;
@@ -72,7 +72,7 @@ public class SolidAxleRearSuspension : Suspension
 
 	private void Awake()
 	{
-        carController = GetComponentInParent<CarController>();
+        carController = GetComponentInParent<AGS_MTC_CarController>();
 
         if (RLWheel.SteeringAxle != null)
             rlSteeringAxleBaseRotation = RLWheel.SteeringAxle.localRotation;
@@ -197,7 +197,7 @@ public class SolidAxleRearSuspension : Suspension
 	{
 		if (!(wheelColliders[0] == null) && !(wheelColliders[1] == null))
 		{
-			WheelComponent obj = wheelColliders[0];
+            AGS_MTC_WheelComponent obj = wheelColliders[0];
 			float floatValue = Controls.Travel.FloatValue;
 			wheelColliders[1].suspensionLength = floatValue;
 			obj.suspensionLength = floatValue;
@@ -255,8 +255,8 @@ public class SolidAxleRearSuspension : Suspension
 		{
 			return;
 		}
-		WheelComponent[] wheelColliders = base.wheelColliders;
-		foreach (WheelComponent x in wheelColliders)
+        AGS_MTC_WheelComponent[] wheelColliders = base.wheelColliders;
+		foreach (AGS_MTC_WheelComponent x in wheelColliders)
 		{
 			if (x == null)
 			{

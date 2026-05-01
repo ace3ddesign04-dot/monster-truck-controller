@@ -1,4 +1,4 @@
-using CustomVP;
+using AGS_MonsterTruckControl;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -6,7 +6,7 @@ using UnityEngine;
 public class SuspensionController : MonoBehaviour
 {
 	[HideInInspector]
-	public CarController carController;
+	public AGS_MTC_CarController carController;
 
 	[HideInInspector]
 	public bool UpdateSuspensionInUpdate;
@@ -80,7 +80,7 @@ public class SuspensionController : MonoBehaviour
 
 	private void Awake()
 	{
-		carController = GetComponent<CarController>();
+		carController = GetComponent<AGS_MTC_CarController>();
 	}
 
 	public void SetStockWheels()
@@ -170,7 +170,7 @@ public class SuspensionController : MonoBehaviour
 
 	public void FindSuspensions()
 	{
-		carController = GetComponent<CarController>();
+		carController = GetComponent<AGS_MTC_CarController>();
 		Suspension[] array = new Suspension[GetComponentsInChildren<Suspension>(includeInactive: true).Length];
 		array = GetComponentsInChildren<Suspension>(includeInactive: true);
 		FrontSuspensions = new List<Suspension>();
@@ -510,8 +510,8 @@ public class SuspensionController : MonoBehaviour
 			}
 			if (carController != null)
 			{
-				WheelComponent[] wheelColliders = CurrentFrontSuspension.wheelColliders;
-				foreach (WheelComponent wheelComponent in wheelColliders)
+                AGS_MTC_WheelComponent[] wheelColliders = CurrentFrontSuspension.wheelColliders;
+				foreach (AGS_MTC_WheelComponent wheelComponent in wheelColliders)
 				{
 					wheelComponent.wheelRadius = FrontWheelsControls.DefaultWheelColliderRadius * floatValue3;
 					if (!FrontWheelsControls.TankTracks)
@@ -573,8 +573,8 @@ public class SuspensionController : MonoBehaviour
 		}
 		if (carController != null)
 		{
-			WheelComponent[] wheelColliders2 = CurrentRearSuspension.wheelColliders;
-			foreach (WheelComponent wheelComponent2 in wheelColliders2)
+            AGS_MTC_WheelComponent[] wheelColliders2 = CurrentRearSuspension.wheelColliders;
+			foreach (AGS_MTC_WheelComponent wheelComponent2 in wheelColliders2)
 			{
 				if (!RearWheelsControls.TankTracks)
 				{
@@ -612,7 +612,7 @@ public class SuspensionController : MonoBehaviour
 		{
 			while (carController.wheels.Count < WheelsNumber)
 			{
-				carController.wheels.Add(new _Wheel());
+				carController.wheels.Add(new AGS_MTC_Wheel());
 				carController.wheels[carController.wheels.Count - 1].power = carController.RWD;
 				carController.wheels[carController.wheels.Count - 1].inverseSteer = true;
 				carController.wheels[carController.wheels.Count - 1].handbrake = true;

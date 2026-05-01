@@ -1,9 +1,9 @@
 using System;
 using UnityEngine;
 
-namespace CustomVP
+namespace AGS_MonsterTruckControl
 {
-	public class WheelCollider : MonoBehaviour
+	public class AGS_MTC_WheelCollider : MonoBehaviour
 	{
 		private GameObject wheel;
 
@@ -35,11 +35,11 @@ namespace CustomVP
 
 		private int currentRaycastMask = -67108865;
 
-		private WheelSweepType currentSweepType;
+		private AGS_MTC_WheelSweepType currentSweepType;
 
-		private CustomWheelFrictionCurve fwdFrictionCurve = new CustomWheelFrictionCurve(0.06f, 1.2f, 0.065f, 1.25f, 0.7f);
+		private AGS_MTC_WheelFrictionCurve fwdFrictionCurve = new AGS_MTC_WheelFrictionCurve(0.06f, 1.2f, 0.065f, 1.25f, 0.7f);
 
-		private CustomWheelFrictionCurve sideFrictionCurve = new CustomWheelFrictionCurve(0.03f, 1f, 0.04f, 1.05f, 0.7f);
+		private AGS_MTC_WheelFrictionCurve sideFrictionCurve = new AGS_MTC_WheelFrictionCurve(0.03f, 1f, 0.04f, 1.05f, 0.7f);
 
 		private bool automaticUpdates;
 
@@ -47,9 +47,9 @@ namespace CustomVP
 
 		private Action<Vector3> onImpactCallback;
 
-		private Action<WheelCollider> preUpdateCallback;
+		private Action<AGS_MTC_WheelCollider> preUpdateCallback;
 
-		private Action<WheelCollider> postUpdateCallback;
+		private Action<AGS_MTC_WheelCollider> postUpdateCallback;
 
 		private float extSpringForce;
 
@@ -108,13 +108,13 @@ namespace CustomVP
 		private AnimationCurve springcurve = new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(1f, 1f));
 
 		[HideInInspector]
-		public WheelCollider OppositeWheel;
+		public AGS_MTC_WheelCollider OppositeWheel;
 
 		[HideInInspector]
-		public WheelCollider AnotherAxleWheelL;
+		public AGS_MTC_WheelCollider AnotherAxleWheelL;
 
 		[HideInInspector]
-		public WheelCollider AnotherAxleWheelR;
+		public AGS_MTC_WheelCollider AnotherAxleWheelR;
 
 		[HideInInspector]
 		public bool DiffLock;
@@ -242,7 +242,7 @@ namespace CustomVP
 			}
 		}
 
-		public CustomWheelFrictionCurve forwardFrictionCurve
+		public AGS_MTC_WheelFrictionCurve forwardFrictionCurve
 		{
 			get
 			{
@@ -257,7 +257,7 @@ namespace CustomVP
 			}
 		}
 
-		public CustomWheelFrictionCurve sidewaysFrictionCurve
+		public AGS_MTC_WheelFrictionCurve sidewaysFrictionCurve
 		{
 			get
 			{
@@ -368,7 +368,7 @@ namespace CustomVP
 			}
 		}
 
-		public WheelSweepType sweepType
+		public AGS_MTC_WheelSweepType sweepType
 		{
 			get
 			{
@@ -487,12 +487,12 @@ namespace CustomVP
 			onImpactCallback = callback;
 		}
 
-		public void setPreUpdateCallback(Action<WheelCollider> callback)
+		public void setPreUpdateCallback(Action<AGS_MTC_WheelCollider> callback)
 		{
 			preUpdateCallback = callback;
 		}
 
-		public void setPostUpdateCallback(Action<WheelCollider> callback)
+		public void setPostUpdateCallback(Action<AGS_MTC_WheelCollider> callback)
 		{
 			postUpdateCallback = callback;
 		}
@@ -682,9 +682,9 @@ namespace CustomVP
 		{
 			switch (currentSweepType)
 			{
-			case WheelSweepType.RAY:
+			case AGS_MTC_WheelSweepType.RAY:
 				return suspensionSweepRaycast();
-			case WheelSweepType.SPHERE:
+			case AGS_MTC_WheelSweepType.SPHERE:
 				return suspensionSweepSpherecast(ref xContactOffset);
 			default:
 				return suspensionSweepRaycast();

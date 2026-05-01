@@ -1,8 +1,8 @@
-using CustomVP;
+using AGS_MonsterTruckControl;
 
 public class PowerPart
 {
-	public VehicleType vehicleType;
+	public AGS_MTC_VehicleType vehicleType;
 
 	public PowerPartType partType;
 
@@ -14,7 +14,7 @@ public class PowerPart
 
 	public string Description;
 
-	public PowerPart(VehicleType _vehicleType, PowerPartType _partType, int _stage, int _partCost, float _incrementPercentage, string _description)
+	public PowerPart(AGS_MTC_VehicleType _vehicleType, PowerPartType _partType, int _stage, int _partCost, float _incrementPercentage, string _description)
 	{
 		vehicleType = _vehicleType;
 		partType = _partType;

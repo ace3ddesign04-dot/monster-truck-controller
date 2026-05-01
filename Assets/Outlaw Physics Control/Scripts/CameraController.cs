@@ -1,4 +1,4 @@
-using CustomVP;
+using AGS_MonsterTruckControl;
 using UnityEngine;
 using UnityStandardAssets.CrossPlatformInput;
 
@@ -122,7 +122,7 @@ public class CameraController : MonoBehaviour
 
 	private Vector3 movingSpeed;
 
-	public CarController carController;
+	public AGS_MTC_CarController carController;
 	//private CarController carController
 	//{
 	//	get

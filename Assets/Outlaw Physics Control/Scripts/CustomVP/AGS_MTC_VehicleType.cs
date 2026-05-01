@@ -1,9 +1,9 @@
 using System;
 
-namespace CustomVP
+namespace AGS_MonsterTruckControl
 {
 	[Serializable]
-	public enum VehicleType
+	public enum AGS_MTC_VehicleType
 	{
 		Any,
 		Truck,
