@@ -10,12 +10,10 @@ public class Configurations : MonoBehaviour {
     [SerializeField] private int defaultSolverVelocityIterations;
 
     private void Start() {
-        float defaultMaxAngularSpeed = Physics.defaultMaxAngularSpeed;
-        Vector3 gravity =  Physics.gravity;
-        bool autoSyncTransform = Physics.autoSyncTransforms;
-        int defaultSolverIterations = Physics.defaultSolverIterations;
-        int defaultSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
-
-        print($"-=> {defaultMaxAngularSpeed} - {gravity} - {autoSyncTransform} - {defaultSolverIterations} - {defaultSolverVelocityIterations}");
+        Physics.defaultMaxAngularSpeed = defaultMaxAngularSpeed;
+        Physics.gravity = gravity;
+        Physics.autoSyncTransforms = autoSyncTransform;
+        Physics.defaultSolverIterations = defaultSolverIterations;
+        Physics.defaultSolverVelocityIterations = defaultSolverVelocityIterations;
     }
 }
