@@ -174,10 +174,14 @@ namespace AGS_MonsterTruckControl {
             // Rear wheelie
             bool wheelieState = EnableWheelieHold;
 
-            if (wheelieState && !wheelieEventPrevState)
+            if (wheelieState && !wheelieEventPrevState) {
                 OnWheelieEnter.Invoke();
-            else if (!wheelieState && wheelieEventPrevState)
+                isWheeling = true;
+            }
+            else if (!wheelieState && wheelieEventPrevState) {
                 OnWheelieExit.Invoke();
+                isWheeling = false;
+            }
 
             wheelieEventPrevState = wheelieState;
 
@@ -212,7 +216,7 @@ namespace AGS_MonsterTruckControl {
 
             if (donutState && !donutEventPrevState) {
                 OnDonutEnter.Invoke();
-
+                isDonuting = true;
                 donutAccumulatedYaw = 0f;
                 donutCompletedRounds = 0;
                 currentDonutTargetYawRate = DonutTargetYawRate;
@@ -249,7 +253,7 @@ namespace AGS_MonsterTruckControl {
             }
             else if (!donutState && donutEventPrevState) {
                 OnDonutExit.Invoke();
-
+                isDonuting = false;
                 donutAccumulatedYaw = 0f;
                 donutCompletedRounds = 0;
                 currentDonutTargetYawRate = DonutTargetYawRate;
@@ -262,8 +266,9 @@ namespace AGS_MonsterTruckControl {
             // Side self right
             bool recoverState = sideSelfRightActive;
 
-            if (recoverState && !sideSelfRightEventPrevState)
+            if (recoverState && !sideSelfRightEventPrevState) {
                 OnSideSelfRightEnter.Invoke();
+            }
 
             sideSelfRightEventPrevState = recoverState;
         }
@@ -913,6 +918,7 @@ namespace AGS_MonsterTruckControl {
 
         [Header("Wheelie Hold")]
         public bool EnableWheelieStunt = true;
+        public bool isWheeling;
         public bool EnableWheelieHold = false;
         public float WheelingAngle = 0.16f;
 
@@ -1151,7 +1157,7 @@ namespace AGS_MonsterTruckControl {
 
         private bool backflipArmed = false;
         private float backflipArmTime = -999f;
-        private bool autoBackflipActive = false;
+        public bool autoBackflipActive = false;
         private bool wasGroundedLastFrame = false;
 
         private Vector3 backflipLaunchForwardFlat;
@@ -1170,7 +1176,6 @@ namespace AGS_MonsterTruckControl {
             backflipArmed = false;
             backflipAccumulatedAngle = 0f;
             backflipHangTimer = 0f;
-
             currentBackflipTargetAngle = BackflipTargetAngle;
 
             backflipLaunchForwardFlat = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
@@ -1186,7 +1191,6 @@ namespace AGS_MonsterTruckControl {
             autoBackflipLandingCatchActive = false;
             backflipAccumulatedAngle = 0f;
             backflipHangTimer = 0f;
-
             if (wasBackflipRunning) {
                 backflipWheelieBlockTimer = BackflipWheelieBlockTime;
             }
@@ -1716,6 +1720,7 @@ namespace AGS_MonsterTruckControl {
         #region Donut Stunt
         [Header("Donut Assist")]
         public bool donutStuntActive = true;
+        public bool isDonuting;
         public float DonutMinSpeed = 4f;
         public float DonutMaxSpeed = 22f;
         public float DonutMinThrottle = 0.55f;
